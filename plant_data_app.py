@@ -372,8 +372,8 @@ def main():
     # Processing section
     st.header("⚙️ Processing Results")
     
-    # Center the process button with better spacing
-    col1, col2, col3 = st.columns([0.5, 3, 0.5])
+    # Center the process button properly
+    col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
         st.markdown('<div class="big-action-button process-button">', unsafe_allow_html=True)
@@ -433,7 +433,7 @@ def main():
             # If only one file, show one large download button
             if len(results) == 1:
                 result = results[0]
-                col1, col2, col3 = st.columns([0.5, 3, 0.5])
+                col1, col2, col3 = st.columns([1, 2, 1])
                 with col2:
                     st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
                     st.download_button(
