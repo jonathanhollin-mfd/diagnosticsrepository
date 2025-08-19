@@ -372,13 +372,10 @@ def main():
     # Processing section
     st.header("⚙️ Processing Results")
     
-    # Center the process button properly
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown('<div class="big-action-button process-button">', unsafe_allow_html=True)
-        process_clicked = st.button("🚀 Process All Files", type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Process button aligned left
+    st.markdown('<div class="big-action-button process-button">', unsafe_allow_html=True)
+    process_clicked = st.button("🚀 Process All Files", type="primary")
+    st.markdown('</div>', unsafe_allow_html=True)
     
     # Initialize session state for results
     if 'processed_results' not in st.session_state:
@@ -433,16 +430,14 @@ def main():
             # If only one file, show one large download button
             if len(results) == 1:
                 result = results[0]
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
-                    st.download_button(
-                        label=f"📥 Download {result['output_name']}",
-                        data=result['file_buffer'].getvalue(),
-                        file_name=result['output_name'],
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                    )
-                    st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
+                st.download_button(
+                    label=f"📥 Download {result['output_name']}",
+                    data=result['file_buffer'].getvalue(),
+                    file_name=result['output_name'],
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
             
             # If multiple files, show individual download buttons
             else:
