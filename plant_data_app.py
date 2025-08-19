@@ -15,6 +15,54 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Custom CSS for bigger download buttons
+st.markdown("""
+<style>
+/* Individual file download buttons */
+.stDownloadButton > button {
+    width: 100% !important;
+    height: 60px !important;
+    font-size: 18px !important;
+    font-weight: bold !important;
+    background-color: #4CAF50 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    transition: background-color 0.3s !important;
+    padding: 10px 20px !important;
+}
+
+.stDownloadButton > button:hover {
+    background-color: #45a049 !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+}
+
+/* Bulk download button */
+.bulk-download .stDownloadButton > button {
+    width: 100% !important;
+    height: 80px !important;
+    font-size: 24px !important;
+    font-weight: bold !important;
+    background-color: #2196F3 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    cursor: pointer !important;
+    transition: all 0.3s !important;
+    margin: 20px 0 !important;
+    padding: 15px 30px !important;
+}
+
+.bulk-download .stDownloadButton > button:hover {
+    background-color: #1976D2 !important;
+    transform: translateY(-3px) !important;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.3) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Template file location (in same directory as the app)
 TEMPLATE_FILE = "z-sheet.xlsx"
 
@@ -350,12 +398,16 @@ def main():
                 
                 zip_buffer.seek(0)
                 
-                st.download_button(
-                    label="📦 Download All Files (ZIP)",
-                    data=zip_buffer.getvalue(),
-                    file_name="processed_plant_data.zip",
-                    mime="application/zip"
-                )
+                # Container for bulk download with custom styling
+                with st.container():
+                    st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
+                    st.download_button(
+                        label="📦 Download All Files (ZIP)",
+                        data=zip_buffer.getvalue(),
+                        file_name="processed_plant_data.zip",
+                        mime="application/zip"
+                    )
+                    st.markdown('</div>', unsafe_allow_html=True)
     
     # Data preview section
     if uploaded_files:
