@@ -708,11 +708,11 @@ def excel_combiner():
     st.markdown('<div class="nav-header">📋 Excel File Combiner & Processor</div>', unsafe_allow_html=True)
     
     st.markdown("""
-    This tool combines multiple Excel files, removes duplicates, and matches against a reference file.
+    This tool combines multiple Excel files, removes duplicates, and matches against the z-sheet template.
     
     **Process:**
     1. Upload multiple Excel files to combine
-    2. Upload a reference file for data matching
+    2. Use z-sheet.xlsx template from repository as reference file
     3. The tool will extract tube data, remove duplicates, and create a final processed file
     """)
     
@@ -726,17 +726,19 @@ def excel_combiner():
         help="These files will be combined and processed"
     )
     
-    # Step 2: Upload reference file
-    st.header("📄 Step 2: Upload Reference File")
-    reference_file = st.file_uploader(
-        "Upload reference Excel file",
-        type=['xlsx'],
-        key="reference_file",
-        help="This file contains the reference data for matching"
-    )
+    # Step 2: Reference file check
+    st.header("📄 Step 2: Reference File")
     
-    if not combine_files or not reference_file:
-        st.info("Please upload both the files to combine and the reference file.")
+    # Check if template file exists in repository
+    if not check_template_exists(TEMPLATE_FILE):
+        st.error(f"❌ Reference file '{TEMPLATE_FILE}' not found in repository!")
+        st.info(f"Please ensure '{TEMPLATE_FILE}' is in the same directory as this application.")
+        return
+    
+    st.success(f"✅ Reference file '{TEMPLATE_FILE}' found in repository!")
+    
+    if not combine_files:
+        st.info("Please upload files to combine.")
         return
     
     # Process button
@@ -762,9 +764,8 @@ def excel_combiner():
             
             # Step 4: Load reference file
             st.info("📖 Loading reference file...")
-            reference_file.seek(0)
-            reference_df = pd.read_excel(reference_file)
-            st.success(f"✅ Loaded reference file with {len(reference_df)} entries")
+            reference_df = pd.read_excel(TEMPLATE_FILE)
+            st.success(f"✅ Loaded reference file '{TEMPLATE_FILE}' with {len(reference_df)} entries")
             
             # Step 5: Match and process
             st.info("🔗 Matching data and processing...")
