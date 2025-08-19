@@ -347,13 +347,13 @@ def fill_headwaters_template(cleaned_df, template_file_buffer):
     ws = wb.active
 
     # Map DataFrame columns to z-sheet columns
-    # DataFrame: Plant Code, Tube Code, Strain, Clone Number, Notes
+    # DataFrame: Plant Code, Tube Code, , Strain, Clone #, Notes
     # Z-sheet: Plant Code, Tube 1 *, Strain, Clone, Notes
     column_mapping = {
         "Plant Code": "B",      # Plant Code -> Plant Code
         "Tube Code": "C",       # Tube Code -> Tube 1 *
         "Strain": "E",          # Strain -> Strain
-        "Clone Number": "F",    # Clone Number -> Clone
+        "Clone #": "F",         # Clone # -> Clone
         "Notes": "G"            # Notes -> Notes
     }
 
@@ -395,7 +395,7 @@ def process_single_file(uploaded_file, filename, template_buffer):
 
 # ===================== EXCEL COMBINER FUNCTIONS =====================
 def collect_headwaters_data_from_sheets(uploaded_file):
-    """Collect data from all sheets in a Bad Client Excel Sheet."""
+    """Collect data from all sheets in a Bad Client Excel Sheet - adapted from combine2.py."""
     tube_data = []
     
     try:
@@ -417,7 +417,7 @@ def collect_headwaters_data_from_sheets(uploaded_file):
             if header_row is None:
                 continue  # Skip sheets without expected headers
             
-            # Get column indices
+            # Get column indices - match original script column structure
             col_indices = {}
             for col_num, cell in enumerate(sheet[header_row], 1):
                 cell_value = str(cell.value).strip().lower() if cell.value else ""
@@ -426,16 +426,14 @@ def collect_headwaters_data_from_sheets(uploaded_file):
                 elif "plant" in cell_value:
                     col_indices["Plant Code"] = col_num
                 elif "clone" in cell_value:
-                    col_indices["Clone Number"] = col_num
+                    col_indices["Clone #"] = col_num  # Match original script column name
                 elif "strain" in cell_value:
                     col_indices["Strain"] = col_num
             
-            # Process data rows
+            # Process data rows - extract from column C (Tube) as in original script
             for row_num in range(header_row + 1, sheet.max_row + 1):
-                tube_value = sheet.cell(row=row_num, column=col_indices.get("Tube", 1)).value
-                plant_code = sheet.cell(row=row_num, column=col_indices.get("Plant Code", 2)).value
-                clone_number = sheet.cell(row=row_num, column=col_indices.get("Clone Number", 3)).value
-                strain = sheet.cell(row=row_num, column=col_indices.get("Strain", 4)).value
+                # Use column C (3) for tube data as in original combine2.py
+                tube_value = sheet.cell(row=row_num, column=3).value
                 
                 # Only add rows with tube data and ensure it's not a header
                 if tube_value and str(tube_value).strip():
@@ -443,13 +441,8 @@ def collect_headwaters_data_from_sheets(uploaded_file):
                     # Skip if this looks like a header (contains common header words)
                     header_words = ['tube', 'plant', 'clone', 'strain', 'number', 'code']
                     if not any(word in tube_str.lower() for word in header_words):
-                        tube_data.append([
-                            str(plant_code).strip() if plant_code else "",  # Plant Code
-                            tube_str,                                        # Tube Code
-                            str(strain).strip() if strain else "",          # Strain
-                            str(clone_number).strip() if clone_number else "", # Clone Number
-                            ""  # Empty notes column
-                        ])
+                        # Match original script structure: [tube_value, "", "", "", ""]
+                        tube_data.append([tube_str, "", "", "", ""])
         
     except Exception as e:
         st.error(f"Error processing file: {str(e)}")
@@ -457,12 +450,12 @@ def collect_headwaters_data_from_sheets(uploaded_file):
     return tube_data
 
 def remove_duplicates(tube_data):
-    """Remove duplicate tube entries."""
+    """Remove duplicate tube entries - match original script logic."""
     seen = set()
     unique_data = []
     
     for row in tube_data:
-        tube_id = row[0]
+        tube_id = row[1]  # Tube Code is in position 1 (second column)
         if tube_id not in seen:
             seen.add(tube_id)
             unique_data.append(row)
@@ -481,7 +474,7 @@ def extract_plant_code(tube_id):
     return match.group(1) if match else ""
 
 def match_and_process(combined_df, reference_df):
-    """Match combined data with reference file and process."""
+    """Match combined data with reference file and process - adapted from excel_cleanup2_final_autofill_plantcode.py."""
     combined_df = normalize_tube_ids(combined_df)
     reference_df = normalize_tube_ids(reference_df)
     
@@ -524,6 +517,8 @@ def match_and_process(combined_df, reference_df):
     # Sort missing tubes to bottom
     final_df.sort_values(by="__missing", inplace=True)
     final_df.drop(columns=["__missing"], inplace=True)
+    
+    return final_df
     
 # ===================== QR CODE READER FUNCTIONS =====================
 def add_white_border(img, pixels=40):
@@ -769,7 +764,8 @@ def excel_combiner():
     
     **Process:**
     1. Upload Bad Client Excel Sheet (multiple sheets with columns: Tube, Plant Code, Clone Number, Strain)
-    2. The tool will extract data from all sheets, remove duplicates, and create a final z-sheet
+    2. Upload Reference Excel Sheet (Bad-Client-Excel.xlsx equivalent) for data matching
+    3. The tool will extract data from all sheets, remove duplicates, match with reference data, and create a final z-sheet
     """)
     
     # Check if template file exists in repository
@@ -790,8 +786,22 @@ def excel_combiner():
         help="Upload Bad Client Excel Sheet with multiple sheets containing Tube, Plant Code, Clone Number, and Strain columns"
     )
     
+    # Upload Reference Excel Sheet (Bad-Client-Excel.xlsx equivalent)
+    st.header("📋 Upload Reference Excel Sheet")
+    reference_sheet = st.file_uploader(
+        "Upload Reference Excel Sheet (.xlsx)",
+        type=['xlsx'],
+        accept_multiple_files=False,
+        key="reference_sheet",
+        help="Upload reference Excel sheet (Bad-Client-Excel.xlsx) to match against and auto-fill missing data"
+    )
+    
     if not bad_client_sheet:
         st.info("Please upload a Bad Client Excel Sheet to process.")
+        return
+    
+    if not reference_sheet:
+        st.info("Please upload a Reference Excel Sheet to match against.")
         return
     
     # Process button
@@ -812,7 +822,20 @@ def excel_combiner():
             duplicates_removed = len(tube_data) - len(unique_data)
             st.success(f"✅ Removed {duplicates_removed} duplicates, {len(unique_data)} unique entries remain")
             
-            # Step 3: Create final z-sheet
+            # Step 3: Load reference data
+            st.info("📋 Loading reference data for matching...")
+            reference_df = pd.read_excel(reference_sheet)
+            st.success(f"✅ Loaded reference data with {len(reference_df)} entries")
+            
+            # Step 4: Create combined DataFrame and match with reference
+            st.info("🔗 Matching data with reference file...")
+            combined_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone #", "Notes"])
+            
+            # Match and process data
+            final_df = match_and_process(combined_df, reference_df)
+            st.success(f"✅ Matching complete! Final dataset has {len(final_df)} entries")
+            
+            # Step 5: Create final z-sheet
             st.info("📖 Creating final z-sheet...")
             
             # Load template buffer
@@ -821,22 +844,21 @@ def excel_combiner():
                 st.error(f"❌ Failed to load template file: {TEMPLATE_FILE}")
                 return
             
-            # Create DataFrame for template filling
-            final_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone Number", "Notes"])
-            
             # Fill the z-sheet template with Headwaters data
             output_buffer = fill_headwaters_template(final_df, template_buffer)
             st.success(f"✅ Processing complete! Final z-sheet has {len(final_df)} entries")
             
             # Display results
             st.header("📊 Results Summary")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Total Entries Collected", len(tube_data))
             with col2:
                 st.metric("After Deduplication", len(unique_data))
             with col3:
-                st.metric("Final Z-Sheet Entries", len(unique_data))
+                st.metric("Reference Entries", len(reference_df))
+            with col4:
+                st.metric("Final Z-Sheet Entries", len(final_df))
             
             # Download button
             st.header("📥 Download Z-Sheet")
@@ -1172,6 +1194,7 @@ def main():
         **🌊 Headwaters Submission**
         - Process Bad Client Excel Sheets with multiple sheets
         - Extract data from columns: Tube, Plant Code, Clone Number, Strain
+        - Match with reference data and auto-fill missing information
         - Create standardized z-sheet submission
         """)
     else:
