@@ -172,6 +172,17 @@ def check_template_exists(template_file):
     """Check if a template file exists in the repository."""
     return os.path.exists(template_file)
 
+def load_template_from_file(template_file):
+    """Load a template file into a buffer for processing."""
+    try:
+        with open(template_file, 'rb') as f:
+            template_buffer = io.BytesIO(f.read())
+            template_buffer.seek(0)
+            return template_buffer
+    except Exception as e:
+        st.error(f"Error loading template file {template_file}: {str(e)}")
+        return None
+
 # ===================== PLANT DATA PROCESSOR FUNCTIONS =====================
 def standardize_tube(val):
     """Normalize Tube Code to exactly 'TUBE <digits>'."""
