@@ -15,6 +15,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Template file location (in same directory as the app)
+TEMPLATE_FILE = "z-sheet.xlsx"
+
 # ===================== HELPER FUNCTIONS =====================
 def standardize_tube(val):
     """
@@ -130,10 +133,12 @@ def clean_new_format(uploaded_file):
     df = pd.read_excel(uploaded_file, sheet_name=active_sheet)
 
     # Normalize headers
-    normalized_cols = (df.columns.str.lower()
-                      .str.strip()
-                      .str.replace("*", "", regex=False)
-                      .str.replace("  ", " "))
+    normalized_cols = (
+        df.columns.str.lower()
+        .str.strip()
+        .str.replace("*", "", regex=False)
+        .str.replace("  ", " ")
+    )
 
     # Auto-map columns
     col_map = {}
@@ -187,7 +192,13 @@ def fill_template(cleaned_df, template_file):
     return output_buffer
 
 
-def process_single_file(uploaded_file, template_file, filename):
+def check_template_exists():
+    """Check if the template file exists in the repository."""
+    import os
+    return os.path.exists(TEMPLATE_FILE)
+
+
+def process_single_file(uploaded_file, filename):
     """Process a single uploaded file."""
     try:
         if filename.endswith(".xlsx"):
@@ -202,7 +213,7 @@ def process_single_file(uploaded_file, template_file, filename):
             df_clean = clean_old_format(df_raw)
 
         # Fill template
-        output_buffer = fill_template(df_clean, template_file)
+        output_buffer = fill_template(df_clean, TEMPLATE_FILE)
         base_name = filename.rsplit('.', 1)[0]
         output_filename = f"{base_name}_filled.xlsx"
         
@@ -214,19 +225,27 @@ def process_single_file(uploaded_file, template_file, filename):
 # ===================== STREAMLIT APP =====================
 def main():
     st.title("🌱 Plant Data Processor")
-    st.markdown("Upload your plant data files (CSV/Excel) and template to process and standardize the data.")
+    st.markdown("Upload your plant data files (CSV/Excel) to process and standardize the data.")
+    
+    # Check if template exists
+    if not check_template_exists():
+        st.error(f"❌ Template file '{TEMPLATE_FILE}' not found in the repository!")
+        st.info("Please ensure 'z-sheet.xlsx' is in the same directory as this application.")
+        return
+    
+    st.success(f"✅ Template file '{TEMPLATE_FILE}' found and ready to use!")
     
     # Sidebar for instructions
     with st.sidebar:
         st.header("📋 Instructions")
-        st.markdown("""
-        **Step 1:** Upload your template file (z-sheet.xlsx)
+        st.markdown(f"""
+        **Template:** Using `{TEMPLATE_FILE}` from repository
         
-        **Step 2:** Upload your data files (CSV or Excel)
+        **Step 1:** Upload your data files (CSV or Excel)
         
-        **Step 3:** Review the processed data
+        **Step 2:** Review the processed data
         
-        **Step 4:** Download the results
+        **Step 3:** Download the results
         
         ---
         
@@ -241,21 +260,6 @@ def main():
         - Clone
         - Notes
         """)
-    
-    # Template upload section
-    st.header("📄 Template Upload")
-    template_file = st.file_uploader(
-        "Upload your template file (z-sheet.xlsx)",
-        type=['xlsx'],
-        key="template",
-        help="This is the Excel template that will be filled with your processed data"
-    )
-    
-    if not template_file:
-        st.warning("Please upload a template file to proceed.")
-        return
-    
-    st.success("✅ Template file uploaded successfully!")
     
     # Data files upload section
     st.header("📊 Data Files Upload")
@@ -284,7 +288,7 @@ def main():
             
             # Process the file
             df_clean, output_buffer, output_filename, error = process_single_file(
-                uploaded_file, template_file, uploaded_file.name
+                uploaded_file, uploaded_file.name
             )
             
             if error:
