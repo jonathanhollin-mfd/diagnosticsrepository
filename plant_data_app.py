@@ -764,8 +764,9 @@ def excel_combiner():
     
     **Process:**
     1. Upload Bad Client Excel Sheet (multiple sheets with columns: Tube, Plant Code, Clone Number, Strain)
-    2. Upload Reference Excel Sheet (Bad-Client-Excel.xlsx equivalent) for data matching
-    3. The tool will extract data from all sheets, remove duplicates, match with reference data, and create a final z-sheet
+    2. Optionally upload Reference Excel Sheet (Bad-Client-Excel.xlsx equivalent) for data matching and auto-filling
+    3. The tool will extract data from all sheets, remove duplicates, and create a final z-sheet
+    4. If a reference file is provided, it will also match and auto-fill missing data
     """)
     
     # Check if template file exists in repository
@@ -786,22 +787,18 @@ def excel_combiner():
         help="Upload Bad Client Excel Sheet with multiple sheets containing Tube, Plant Code, Clone Number, and Strain columns"
     )
     
-    # Upload Reference Excel Sheet (Bad-Client-Excel.xlsx equivalent)
-    st.header("📋 Upload Reference Excel Sheet")
+    # Upload Reference Excel Sheet (Bad-Client-Excel.xlsx equivalent) - OPTIONAL
+    st.header("📋 Upload Reference Excel Sheet (Optional)")
     reference_sheet = st.file_uploader(
-        "Upload Reference Excel Sheet (.xlsx)",
+        "Upload Reference Excel Sheet (.xlsx) - Optional",
         type=['xlsx'],
         accept_multiple_files=False,
         key="reference_sheet",
-        help="Upload reference Excel sheet (Bad-Client-Excel.xlsx) to match against and auto-fill missing data"
+        help="Upload reference Excel sheet (Bad-Client-Excel.xlsx) to match against and auto-fill missing data. This is optional - if not provided, the tool will create Z sheets from the uploaded data only."
     )
     
     if not bad_client_sheet:
         st.info("Please upload a Bad Client Excel Sheet to process.")
-        return
-    
-    if not reference_sheet:
-        st.info("Please upload a Reference Excel Sheet to match against.")
         return
     
     # Process button
@@ -822,20 +819,26 @@ def excel_combiner():
             duplicates_removed = len(tube_data) - len(unique_data)
             st.success(f"✅ Removed {duplicates_removed} duplicates, {len(unique_data)} unique entries remain")
             
-            # Step 3: Load reference data
-            st.info("📋 Loading reference data for matching...")
-            reference_df = pd.read_excel(reference_sheet)
-            st.success(f"✅ Loaded reference data with {len(reference_df)} entries")
+            # Step 3: Process data (with or without reference file)
+            if reference_sheet:
+                # Load reference data and match
+                st.info("📋 Loading reference data for matching...")
+                reference_df = pd.read_excel(reference_sheet)
+                st.success(f"✅ Loaded reference data with {len(reference_df)} entries")
+                
+                st.info("🔗 Matching data with reference file...")
+                combined_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone #", "Notes"])
+                
+                # Match and process data
+                final_df = match_and_process(combined_df, reference_df)
+                st.success(f"✅ Matching complete! Final dataset has {len(final_df)} entries")
+            else:
+                # No reference file - use collected data directly
+                st.info("📋 No reference file provided - using collected data directly...")
+                final_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone #", "Notes"])
+                st.success(f"✅ Using {len(final_df)} entries from collected data")
             
-            # Step 4: Create combined DataFrame and match with reference
-            st.info("🔗 Matching data with reference file...")
-            combined_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone #", "Notes"])
-            
-            # Match and process data
-            final_df = match_and_process(combined_df, reference_df)
-            st.success(f"✅ Matching complete! Final dataset has {len(final_df)} entries")
-            
-            # Step 5: Create final z-sheet
+            # Step 4: Create final z-sheet
             st.info("📖 Creating final z-sheet...")
             
             # Load template buffer
@@ -850,15 +853,24 @@ def excel_combiner():
             
             # Display results
             st.header("📊 Results Summary")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Entries Collected", len(tube_data))
-            with col2:
-                st.metric("After Deduplication", len(unique_data))
-            with col3:
-                st.metric("Reference Entries", len(reference_df))
-            with col4:
-                st.metric("Final Z-Sheet Entries", len(final_df))
+            if reference_sheet:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Entries Collected", len(tube_data))
+                with col2:
+                    st.metric("After Deduplication", len(unique_data))
+                with col3:
+                    st.metric("Reference Entries", len(reference_df))
+                with col4:
+                    st.metric("Final Z-Sheet Entries", len(final_df))
+            else:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Entries Collected", len(tube_data))
+                with col2:
+                    st.metric("After Deduplication", len(unique_data))
+                with col3:
+                    st.metric("Final Z-Sheet Entries", len(final_df))
             
             # Download button
             st.header("📥 Download Z-Sheet")
@@ -1194,7 +1206,7 @@ def main():
         **🌊 Headwaters Submission**
         - Process Bad Client Excel Sheets with multiple sheets
         - Extract data from columns: Tube, Plant Code, Clone Number, Strain
-        - Match with reference data and auto-fill missing information
+        - Optionally match with reference data and auto-fill missing information
         - Create standardized z-sheet submission
         """)
     else:
