@@ -21,40 +21,46 @@ st.markdown("""
 /* Big action buttons (Process and Download) */
 .big-action-button .stButton > button {
     width: 100% !important;
-    height: 80px !important;
-    font-size: 24px !important;
+    height: 120px !important;
+    font-size: 32px !important;
     font-weight: bold !important;
     border: none !important;
-    border-radius: 12px !important;
+    border-radius: 16px !important;
     cursor: pointer !important;
     transition: all 0.3s !important;
-    padding: 15px 30px !important;
-    margin: 10px 0 !important;
+    padding: 25px 40px !important;
+    margin: 15px 0 !important;
 }
 
 .big-action-button .stButton > button:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.3) !important;
+    transform: translateY(-5px) !important;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.4) !important;
 }
 
 /* Process button specific styling */
 .process-button .stButton > button {
     background-color: #FF6B35 !important;
     color: white !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 4px 8px rgba(255,107,53,0.3) !important;
 }
 
 .process-button .stButton > button:hover {
     background-color: #E55A2B !important;
+    box-shadow: 0 6px 12px rgba(255,107,53,0.4) !important;
 }
 
 /* Download button specific styling */
 .download-button .stButton > button {
     background-color: #4CAF50 !important;
     color: white !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 4px 8px rgba(76,175,80,0.3) !important;
 }
 
 .download-button .stButton > button:hover {
     background-color: #45a049 !important;
+    box-shadow: 0 6px 12px rgba(76,175,80,0.4) !important;
 }
 
 /* Individual file download buttons */
