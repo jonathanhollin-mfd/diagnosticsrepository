@@ -363,62 +363,61 @@ def process_single_file(uploaded_file, filename, template_buffer):
         return None, None, None, str(e)
 
 # ===================== EXCEL COMBINER FUNCTIONS =====================
-def collect_tube_data_from_files(uploaded_files, is_bad_client_sheet=False):
-    """Collect tube data from uploaded Excel files."""
+def collect_headwaters_data_from_sheets(uploaded_file):
+    """Collect data from all sheets in a Bad Client Excel Sheet."""
     tube_data = []
     
-    for uploaded_file in uploaded_files:
-        filename = uploaded_file.name
-        uploaded_file.seek(0)
+    try:
+        # Load the workbook
+        wb = openpyxl.load_workbook(uploaded_file, data_only=True)
         
-        try:
-            if is_bad_client_sheet:
-                # Use Plant Data Processor cleaning for Bad Client Excel Sheet
-                if filename.endswith(".xlsx"):
-                    df_clean = clean_new_format(uploaded_file)
-                else:
-                    uploaded_file.seek(0)
-                    if filename.endswith(".csv"):
-                        df_raw = pd.read_csv(uploaded_file)
-                    else:
-                        df_raw = pd.read_excel(uploaded_file)
-                    df_clean = clean_old_format(df_raw)
+        # Process each sheet
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            
+            # Find the header row (look for expected column names)
+            header_row = None
+            for row_num in range(1, min(20, sheet.max_row + 1)):  # Check first 20 rows
+                row_values = [str(cell.value).strip() if cell.value else "" for cell in sheet[row_num]]
+                if any("tube" in val.lower() for val in row_values) and any("plant" in val.lower() for val in row_values):
+                    header_row = row_num
+                    break
+            
+            if header_row is None:
+                continue  # Skip sheets without expected headers
+            
+            # Get column indices
+            col_indices = {}
+            for col_num, cell in enumerate(sheet[header_row], 1):
+                cell_value = str(cell.value).strip().lower() if cell.value else ""
+                if "tube" in cell_value:
+                    col_indices["Tube"] = col_num
+                elif "plant" in cell_value:
+                    col_indices["Plant Code"] = col_num
+                elif "clone" in cell_value:
+                    col_indices["Clone Number"] = col_num
+                elif "strain" in cell_value:
+                    col_indices["Strain"] = col_num
+            
+            # Process data rows
+            for row_num in range(header_row + 1, sheet.max_row + 1):
+                tube_value = sheet.cell(row=row_num, column=col_indices.get("Tube", 1)).value
+                plant_code = sheet.cell(row=row_num, column=col_indices.get("Plant Code", 2)).value
+                clone_number = sheet.cell(row=row_num, column=col_indices.get("Clone Number", 3)).value
+                strain = sheet.cell(row=row_num, column=col_indices.get("Strain", 4)).value
                 
-                # Convert cleaned DataFrame to tube data format
-                for _, row in df_clean.iterrows():
+                # Only add rows with tube data
+                if tube_value and str(tube_value).strip():
                     tube_data.append([
-                        row.get("Tube Code", ""),
-                        row.get("Plant Code", ""),
-                        row.get("Clone", ""),
-                        row.get("Strain", ""),
-                        row.get("Notes", "")
+                        str(tube_value).strip(),
+                        str(plant_code).strip() if plant_code else "",
+                        str(clone_number).strip() if clone_number else "",
+                        str(strain).strip() if strain else "",
+                        f"Sheet: {sheet_name}"  # Add sheet name as note
                     ])
-            else:
-                # Original X sheet processing
-                if filename.endswith(".xls"):
-                    # Handle .xls files
-                    file_contents = uploaded_file.read()
-                    wb = xlrd.open_workbook(file_contents=file_contents)
-                    sheet = wb.sheet_by_index(0)
-                    
-                    for row in range(1, sheet.nrows):
-                        tube_value = sheet.cell_value(row, 2)  # column C
-                        if tube_value:
-                            tube_data.append([tube_value, "", "", "", ""])
-                            
-                elif filename.endswith(".xlsx"):
-                    # Handle .xlsx files
-                    wb = openpyxl.load_workbook(uploaded_file)
-                    sheet = wb.active
-                    
-                    for row in range(2, sheet.max_row + 1):
-                        tube_value = sheet.cell(row=row, column=3).value  # column C
-                        if tube_value:
-                            tube_data.append([tube_value, "", "", "", ""])
-                        
-        except Exception as e:
-            st.error(f"Error processing {filename}: {str(e)}")
-            continue
+        
+    except Exception as e:
+        st.error(f"Error processing file: {str(e)}")
     
     return tube_data
 
@@ -435,7 +434,7 @@ def remove_duplicates(tube_data):
     
     return unique_data
 
-def normalize_tube_ids(df, column="Tube 1"):
+def normalize_tube_ids(df, column="Tube Code"):
     """Normalize tube IDs for matching."""
     df = df.copy()
     df["_normalized_tube"] = df[column].astype(str).str.strip().str.lower()
@@ -456,7 +455,7 @@ def match_and_process(combined_df, reference_df):
     
     for _, row in combined_df.iterrows():
         tube_id_norm = row["_normalized_tube"]
-        original_tube_id = row["Tube 1"]
+        original_tube_id = row["Tube Code"]
         
         if tube_id_norm in ref_lookup.index:
             matched_row = ref_lookup.loc[tube_id_norm]
@@ -473,7 +472,7 @@ def match_and_process(combined_df, reference_df):
             plant_code = extract_plant_code(original_tube_id)
             new_row = {
                 "Plant Code": plant_code,
-                "Tube 1": original_tube_id,
+                "Tube Code": original_tube_id,
                 "Clone #": "",
                 "Strain": "",
                 "Notes": "Tube missing from reference Excel sheet",
@@ -485,7 +484,7 @@ def match_and_process(combined_df, reference_df):
     
     # Reorder columns and add empty column
     final_df.insert(2, " ", "")
-    final_df = final_df[["Plant Code", "Tube 1", " ", "Strain", "Clone #", "Notes", "__missing"]]
+    final_df = final_df[["Plant Code", "Tube Code", " ", "Strain", "Clone #", "Notes", "__missing"]]
     
     # Sort missing tubes to bottom
     final_df.sort_values(by="__missing", inplace=True)
@@ -660,7 +659,7 @@ def plant_data_processor():
     st.success(f"✅ Template file '{TEMPLATE_FILE}' found in repository!")
     
     # Data files upload
-    st.header("📊 Data Files Upload")
+    st.header("📊 Upload Raw Client Sheet")
     uploaded_files = st.file_uploader(
         "Upload your data files (CSV or Excel)",
         type=['csv', 'xlsx'],
@@ -727,16 +726,15 @@ def plant_data_processor():
                     )
 
 def excel_combiner():
-    """Excel File Combiner & Processor function."""
-    st.markdown('<div class="nav-header">📋 Excel File Combiner & Processor</div>', unsafe_allow_html=True)
+    """Headwaters Submission function."""
+    st.markdown('<div class="nav-header">🌊 Headwaters Submission</div>', unsafe_allow_html=True)
     
     st.markdown("""
-    This tool combines multiple Excel files, removes duplicates, and matches against the z-sheet template.
+    This tool processes Bad Client Excel Sheets with multiple sheets and creates a standardized z-sheet submission.
     
     **Process:**
-    1. Upload X sheets (standard format files) - extracts tube data from column C
-    2. Upload Bad Client Excel Sheet (optional) - uses Plant Data Processor format with full data extraction
-    3. The tool will combine all data, remove duplicates, and match against the z-sheet template
+    1. Upload Bad Client Excel Sheet (multiple sheets with columns: Tube, Plant Code, Clone Number, Strain)
+    2. The tool will extract data from all sheets, remove duplicates, and create a final z-sheet
     """)
     
     # Check if template file exists in repository
@@ -747,35 +745,18 @@ def excel_combiner():
     
     st.success(f"✅ Reference file '{TEMPLATE_FILE}' found in repository!")
     
-    # Upload X sheets
-    st.header("📁 Step 1: Upload X Sheets")
-    x_sheets = st.file_uploader(
-        "Upload X sheets (.xls or .xlsx)",
-        type=['xls', 'xlsx'],
-        accept_multiple_files=True,
-        key="x_sheets",
-        help="Upload standard format X sheets to combine"
-    )
-    
     # Upload Bad Client Excel Sheet
-    st.header("📁 Step 2: Upload Bad Client Excel Sheet (Optional)")
+    st.header("📁 Upload Bad Client Excel Sheet")
     bad_client_sheet = st.file_uploader(
-        "Upload Bad Client Excel Sheet (.xls or .xlsx)",
-        type=['xls', 'xlsx'],
+        "Upload Bad Client Excel Sheet (.xlsx)",
+        type=['xlsx'],
         accept_multiple_files=False,
         key="bad_client_sheet",
-        help="Upload Bad Client Excel Sheet if needed (optional)"
+        help="Upload Bad Client Excel Sheet with multiple sheets containing Tube, Plant Code, Clone Number, and Strain columns"
     )
     
-    # Combine all files
-    combine_files = []
-    if x_sheets:
-        combine_files.extend(x_sheets)
-    if bad_client_sheet:
-        combine_files.append(bad_client_sheet)
-    
-    if not combine_files:
-        st.info("Please upload at least one X sheet to process.")
+    if not bad_client_sheet:
+        st.info("Please upload a Bad Client Excel Sheet to process.")
         return
     
     # Process button
@@ -785,33 +766,10 @@ def excel_combiner():
     
     if combine_clicked:
         try:
-            # Show which files are being processed
-            st.info(f"🔍 Processing {len(combine_files)} files:")
-            if x_sheets:
-                st.write(f"• {len(x_sheets)} X sheet(s)")
-            if bad_client_sheet:
-                st.write(f"• 1 Bad Client Excel Sheet")
-            
-            # Step 1: Collect tube data from different file types
-            st.info("🔍 Collecting tube data from uploaded files...")
-            
-            # Process X sheets
-            x_sheet_data = []
-            if x_sheets:
-                st.write("Processing X sheets...")
-                x_sheet_data = collect_tube_data_from_files(x_sheets, is_bad_client_sheet=False)
-                st.write(f"• Collected {len(x_sheet_data)} entries from X sheets")
-            
-            # Process Bad Client Excel Sheet
-            bad_client_data = []
-            if bad_client_sheet:
-                st.write("Processing Bad Client Excel Sheet...")
-                bad_client_data = collect_tube_data_from_files([bad_client_sheet], is_bad_client_sheet=True)
-                st.write(f"• Collected {len(bad_client_data)} entries from Bad Client Excel Sheet")
-            
-            # Combine all data
-            tube_data = x_sheet_data + bad_client_data
-            st.success(f"✅ Collected {len(tube_data)} total tube entries")
+            # Step 1: Collect data from all sheets
+            st.info("🔍 Collecting data from all sheets in Bad Client Excel Sheet...")
+            tube_data = collect_headwaters_data_from_sheets(bad_client_sheet)
+            st.success(f"✅ Collected {len(tube_data)} total entries from all sheets")
             
             # Step 2: Remove duplicates
             st.info("🧹 Removing duplicates...")
@@ -820,17 +778,23 @@ def excel_combiner():
             st.success(f"✅ Removed {duplicates_removed} duplicates, {len(unique_data)} unique entries remain")
             
             # Step 3: Create combined DataFrame
-            combined_df = pd.DataFrame(unique_data, columns=["Tube 1", "Plant Code", "Clone #", "Strain", "Notes"])
+            combined_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone #", "Strain", "Notes"])
             
-            # Step 4: Load reference file
-            st.info("📖 Loading reference file...")
-            reference_df = pd.read_excel(TEMPLATE_FILE)
-            st.success(f"✅ Loaded reference file '{TEMPLATE_FILE}' with {len(reference_df)} entries")
+            # Step 4: Create final z-sheet
+            st.info("📖 Creating final z-sheet...")
             
-            # Step 5: Match and process
-            st.info("🔗 Matching data and processing...")
-            final_df = match_and_process(combined_df, reference_df)
-            st.success(f"✅ Processing complete! Final file has {len(final_df)} entries")
+            # Load template buffer
+            template_buffer = load_template_from_file(TEMPLATE_FILE)
+            if not template_buffer:
+                st.error(f"❌ Failed to load template file: {TEMPLATE_FILE}")
+                return
+            
+            # Create DataFrame for template filling
+            final_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone #", "Strain", "Notes"])
+            
+            # Fill the z-sheet template
+            output_buffer = fill_template(final_df, template_buffer)
+            st.success(f"✅ Processing complete! Final z-sheet has {len(final_df)} entries")
             
             # Save results
             output_buffer = io.BytesIO()
@@ -839,23 +803,21 @@ def excel_combiner():
             
             # Display results
             st.header("📊 Results Summary")
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Original Entries", len(tube_data))
+                st.metric("Total Entries Collected", len(tube_data))
             with col2:
                 st.metric("After Deduplication", len(unique_data))
             with col3:
-                st.metric("Matched Entries", len(final_df[final_df['Notes'] != "Tube missing from reference Excel sheet"]))
-            with col4:
-                st.metric("Missing Entries", len(final_df[final_df['Notes'] == "Tube missing from reference Excel sheet"]))
+                st.metric("Final Z-Sheet Entries", len(final_df))
             
             # Download button
-            st.header("📥 Download Results")
+            st.header("📥 Download Z-Sheet")
             st.markdown('<div class="big-action-button download-button">', unsafe_allow_html=True)
             st.download_button(
-                label="📥 Download Final Processed File",
+                label="📥 Download Headwaters Z-Sheet",
                 data=output_buffer.getvalue(),
-                file_name="Final_Combined_Output.xlsx",
+                file_name="Headwaters_Submission.xlsx",
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 key="download_final"
             )
@@ -1165,7 +1127,7 @@ def main():
         "Choose Function:",
         [
             "🌱 Plant Data Processor", 
-            "📋 Excel Combiner & Processor",
+            "🌊 Headwaters Submission",
             "🔍 QR Code Plate Processor"
         ],
         key="main_nav"
@@ -1182,12 +1144,12 @@ def main():
         - Fill template spreadsheets
         - Process multiple files at once
         """)
-    elif "Excel Combiner" in app_mode:
+    elif "Headwaters Submission" in app_mode:
         st.sidebar.markdown("""
-        **📋 Excel Combiner & Processor**
-        - Combine multiple Excel files
-        - Remove duplicate entries
-        - Match against reference data
+        **🌊 Headwaters Submission**
+        - Process Bad Client Excel Sheets with multiple sheets
+        - Extract data from columns: Tube, Plant Code, Clone Number, Strain
+        - Create standardized z-sheet submission
         """)
     else:
         st.sidebar.markdown("""
@@ -1200,7 +1162,7 @@ def main():
     # Route to appropriate function
     if "Plant Data Processor" in app_mode:
         plant_data_processor()
-    elif "Excel Combiner" in app_mode:
+    elif "Headwaters Submission" in app_mode:
         excel_combiner()
     elif "QR Code Plate Processor" in app_mode:
         qr_plate_processor()
