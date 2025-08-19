@@ -628,19 +628,13 @@ def plant_data_processor():
     """Plant Data Processor function."""
     st.markdown('<div class="nav-header">🌱 Plant Data Processor</div>', unsafe_allow_html=True)
     
-    # Check if template is uploaded
-    template_file = st.file_uploader(
-        "Upload Template File (z-sheet.xlsx)",
-        type=['xlsx'],
-        key="template_upload",
-        help="Upload your z-sheet template file"
-    )
-    
-    if not template_file:
-        st.warning("⚠️ Please upload the z-sheet template file to continue.")
+    # Check if template file exists in repository
+    if not check_template_exists(TEMPLATE_FILE):
+        st.error(f"❌ Template file '{TEMPLATE_FILE}' not found in repository!")
+        st.info(f"Please ensure '{TEMPLATE_FILE}' is in the same directory as this application.")
         return
     
-    st.success("✅ Template file uploaded successfully!")
+    st.success(f"✅ Template file '{TEMPLATE_FILE}' found in repository!")
     
     # Data files upload
     st.header("📊 Data Files Upload")
@@ -668,9 +662,11 @@ def plant_data_processor():
         for i, uploaded_file in enumerate(uploaded_files):
             status_text.text(f"Processing {uploaded_file.name}...")
             
-            # Create template buffer for each file
-            template_file.seek(0)
-            template_buffer = io.BytesIO(template_file.read())
+            # Load template buffer from repository file
+            template_buffer = load_template_from_file(TEMPLATE_FILE)
+            if not template_buffer:
+                st.error(f"❌ Failed to load template file: {TEMPLATE_FILE}")
+                continue
             
             df_clean, output_buffer, output_filename, error = process_single_file(
                 uploaded_file, uploaded_file.name, template_buffer
