@@ -130,12 +130,10 @@ def clean_new_format(uploaded_file):
     df = pd.read_excel(uploaded_file, sheet_name=active_sheet)
 
     # Normalize headers
-    normalized_cols = (
-        df.columns.str.lower()
-        .str.strip()
-        .str.replace("*", "", regex=False)
-        .str.replace("  ", " ")
-    )
+    normalized_cols = (df.columns.str.lower()
+                      .str.strip()
+                      .str.replace("*", "", regex=False)
+                      .str.replace("  ", " "))
 
     # Auto-map columns
     col_map = {}
