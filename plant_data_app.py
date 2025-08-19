@@ -363,7 +363,7 @@ def process_single_file(uploaded_file, filename, template_buffer):
         return None, None, None, str(e)
 
 # ===================== EXCEL COMBINER FUNCTIONS =====================
-def collect_tube_data_from_files(uploaded_files):
+def collect_tube_data_from_files(uploaded_files, is_bad_client_sheet=False):
     """Collect tube data from uploaded Excel files."""
     tube_data = []
     
@@ -372,26 +372,49 @@ def collect_tube_data_from_files(uploaded_files):
         uploaded_file.seek(0)
         
         try:
-            if filename.endswith(".xls"):
-                # Handle .xls files
-                file_contents = uploaded_file.read()
-                wb = xlrd.open_workbook(file_contents=file_contents)
-                sheet = wb.sheet_by_index(0)
+            if is_bad_client_sheet:
+                # Use Plant Data Processor cleaning for Bad Client Excel Sheet
+                if filename.endswith(".xlsx"):
+                    df_clean = clean_new_format(uploaded_file)
+                else:
+                    uploaded_file.seek(0)
+                    if filename.endswith(".csv"):
+                        df_raw = pd.read_csv(uploaded_file)
+                    else:
+                        df_raw = pd.read_excel(uploaded_file)
+                    df_clean = clean_old_format(df_raw)
                 
-                for row in range(1, sheet.nrows):
-                    tube_value = sheet.cell_value(row, 2)  # column C
-                    if tube_value:
-                        tube_data.append([tube_value, "", "", "", ""])
-                        
-            elif filename.endswith(".xlsx"):
-                # Handle .xlsx files
-                wb = openpyxl.load_workbook(uploaded_file)
-                sheet = wb.active
-                
-                for row in range(2, sheet.max_row + 1):
-                    tube_value = sheet.cell(row=row, column=3).value  # column C
-                    if tube_value:
-                        tube_data.append([tube_value, "", "", "", ""])
+                # Convert cleaned DataFrame to tube data format
+                for _, row in df_clean.iterrows():
+                    tube_data.append([
+                        row.get("Tube Code", ""),
+                        row.get("Plant Code", ""),
+                        row.get("Clone", ""),
+                        row.get("Strain", ""),
+                        row.get("Notes", "")
+                    ])
+            else:
+                # Original X sheet processing
+                if filename.endswith(".xls"):
+                    # Handle .xls files
+                    file_contents = uploaded_file.read()
+                    wb = xlrd.open_workbook(file_contents=file_contents)
+                    sheet = wb.sheet_by_index(0)
+                    
+                    for row in range(1, sheet.nrows):
+                        tube_value = sheet.cell_value(row, 2)  # column C
+                        if tube_value:
+                            tube_data.append([tube_value, "", "", "", ""])
+                            
+                elif filename.endswith(".xlsx"):
+                    # Handle .xlsx files
+                    wb = openpyxl.load_workbook(uploaded_file)
+                    sheet = wb.active
+                    
+                    for row in range(2, sheet.max_row + 1):
+                        tube_value = sheet.cell(row=row, column=3).value  # column C
+                        if tube_value:
+                            tube_data.append([tube_value, "", "", "", ""])
                         
         except Exception as e:
             st.error(f"Error processing {filename}: {str(e)}")
@@ -711,8 +734,9 @@ def excel_combiner():
     This tool combines multiple Excel files, removes duplicates, and matches against the z-sheet template.
     
     **Process:**
-    1. Upload multiple Excel files to combine
-    2. The tool will extract tube data, remove duplicates, and match against the z-sheet template
+    1. Upload X sheets (standard format files) - extracts tube data from column C
+    2. Upload Bad Client Excel Sheet (optional) - uses Plant Data Processor format with full data extraction
+    3. The tool will combine all data, remove duplicates, and match against the z-sheet template
     """)
     
     # Check if template file exists in repository
@@ -723,18 +747,35 @@ def excel_combiner():
     
     st.success(f"✅ Reference file '{TEMPLATE_FILE}' found in repository!")
     
-    # Upload files to combine
-    st.header("📁 Upload Files to Combine")
-    combine_files = st.file_uploader(
-        "Upload Excel files to combine (.xls or .xlsx)",
+    # Upload X sheets
+    st.header("📁 Step 1: Upload X Sheets")
+    x_sheets = st.file_uploader(
+        "Upload X sheets (.xls or .xlsx)",
         type=['xls', 'xlsx'],
         accept_multiple_files=True,
-        key="combine_files",
-        help="These files will be combined and processed"
+        key="x_sheets",
+        help="Upload standard format X sheets to combine"
     )
     
+    # Upload Bad Client Excel Sheet
+    st.header("📁 Step 2: Upload Bad Client Excel Sheet (Optional)")
+    bad_client_sheet = st.file_uploader(
+        "Upload Bad Client Excel Sheet (.xls or .xlsx)",
+        type=['xls', 'xlsx'],
+        accept_multiple_files=False,
+        key="bad_client_sheet",
+        help="Upload Bad Client Excel Sheet if needed (optional)"
+    )
+    
+    # Combine all files
+    combine_files = []
+    if x_sheets:
+        combine_files.extend(x_sheets)
+    if bad_client_sheet:
+        combine_files.append(bad_client_sheet)
+    
     if not combine_files:
-        st.info("Please upload files to combine.")
+        st.info("Please upload at least one X sheet to process.")
         return
     
     # Process button
@@ -744,10 +785,33 @@ def excel_combiner():
     
     if combine_clicked:
         try:
-            # Step 1: Collect tube data
+            # Show which files are being processed
+            st.info(f"🔍 Processing {len(combine_files)} files:")
+            if x_sheets:
+                st.write(f"• {len(x_sheets)} X sheet(s)")
+            if bad_client_sheet:
+                st.write(f"• 1 Bad Client Excel Sheet")
+            
+            # Step 1: Collect tube data from different file types
             st.info("🔍 Collecting tube data from uploaded files...")
-            tube_data = collect_tube_data_from_files(combine_files)
-            st.success(f"✅ Collected {len(tube_data)} tube entries")
+            
+            # Process X sheets
+            x_sheet_data = []
+            if x_sheets:
+                st.write("Processing X sheets...")
+                x_sheet_data = collect_tube_data_from_files(x_sheets, is_bad_client_sheet=False)
+                st.write(f"• Collected {len(x_sheet_data)} entries from X sheets")
+            
+            # Process Bad Client Excel Sheet
+            bad_client_data = []
+            if bad_client_sheet:
+                st.write("Processing Bad Client Excel Sheet...")
+                bad_client_data = collect_tube_data_from_files([bad_client_sheet], is_bad_client_sheet=True)
+                st.write(f"• Collected {len(bad_client_data)} entries from Bad Client Excel Sheet")
+            
+            # Combine all data
+            tube_data = x_sheet_data + bad_client_data
+            st.success(f"✅ Collected {len(tube_data)} total tube entries")
             
             # Step 2: Remove duplicates
             st.info("🧹 Removing duplicates...")
