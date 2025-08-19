@@ -489,7 +489,7 @@ def try_rotations(img, angles=(15, -15, 30, -30)):
             return result
     return None
 
-def process_plate_image(uploaded_image, template_buffer, plate_config):
+def process_plate_image(uploaded_image, template_buffer, plate_config, scale_factor=1.0):
     """Process a single plate image to extract QR codes."""
     if not QR_AVAILABLE:
         return None, None, "QR code libraries not available. Please install opencv-python and pyzbar."
@@ -498,6 +498,12 @@ def process_plate_image(uploaded_image, template_buffer, plate_config):
         # Read image
         image = Image.open(uploaded_image).convert("RGB")
         img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Scale image for higher resolution if requested
+        if scale_factor != 1.0:
+            height, width = img.shape[:2]
+            new_height, new_width = int(height * scale_factor), int(width * scale_factor)
+            img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
         
         # Configuration
         COLS = plate_config.get("cols", 8)
@@ -568,17 +574,17 @@ def process_plate_image(uploaded_image, template_buffer, plate_config):
             if qrs:
                 qr_data = qrs[0].data.decode("utf-8").strip()
                 results.append((pos, qr_data))
-                cv2.putText(debug_img, f"{pos}: {qr_data}", (x1 + 3, y1 + 12),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 1)
+                cv2.putText(debug_img, f"{pos}: {qr_data}", (x1 + 5, y1 + 20),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             else:
                 results.append((pos, ""))
-                cv2.putText(debug_img, f"{pos}: ---", (x1 + 3, y1 + 12),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+                cv2.putText(debug_img, f"{pos}: ---", (x1 + 5, y1 + 20),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             
             # Draw grid
-            cv2.rectangle(debug_img, (x1, y1), (x2, y2), (255, 0, 0), 1)
-            cv2.putText(debug_img, pos, (x1 + 5, y1 + 35),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+            cv2.rectangle(debug_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.putText(debug_img, pos, (x1 + 10, y1 + 50),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
         
         # Sort results and populate Excel
         def well_sort_key(entry):
@@ -878,6 +884,11 @@ def qr_plate_processor():
     2. Upload plate images to process
     3. Configure plate settings
     4. Process images to extract QR codes and generate filled Excel files
+    
+    **💡 Image Quality Tips:**
+    - Use the Image Scale Factor setting (1.5-2.0) for higher resolution processing
+    - Annotated images now display at full resolution for better text readability
+    - Larger font sizes make QR codes and position labels easier to read
     """)
     
     # Step 1: Template selection
@@ -913,19 +924,23 @@ def qr_plate_processor():
         pass  # Spacer
     
     # Advanced settings
-    with st.expander("🔧 Advanced Crop Settings"):
-        col1, col2 = st.columns(2)
+    with st.expander("🔧 Advanced Settings"):
+        col1, col2, col3 = st.columns(3)
         with col1:
             crop_width = st.number_input("Crop Width", min_value=100, max_value=5000, value=2180, key="crop_width")
         with col2:
             crop_height = st.number_input("Crop Height", min_value=100, max_value=5000, value=3940, key="crop_height")
+        with col3:
+            scale_factor = st.number_input("Image Scale Factor", min_value=0.5, max_value=3.0, value=1.0, step=0.1, 
+                                         help="Scale factor for image processing. Higher values (1.5-2.0) may improve QR detection but increase processing time.")
     
     plate_config = {
         "cols": cols,
         "rows": rows,
         "margin": margin,
         "crop_width": crop_width,
-        "crop_height": crop_height
+        "crop_height": crop_height,
+        "scale_factor": scale_factor
     }
     
     # Step 3: Upload images
@@ -972,7 +987,7 @@ def qr_plate_processor():
                 st.error(f"❌ Failed to load template file: {template_file}")
                 continue
             
-            result, _, error = process_plate_image(uploaded_image, template_buffer, plate_config)
+            result, _, error = process_plate_image(uploaded_image, template_buffer, plate_config, plate_config.get("scale_factor", 1.0))
             
             if error:
                 st.error(f"❌ Error processing {uploaded_image.name}: {error}")
@@ -1043,7 +1058,7 @@ def qr_plate_processor():
             st.subheader("📄 Individual Files")
             
             # Individual results
-            for result_data in results:
+            for idx, result_data in enumerate(results):
                 result = result_data['result']
                 
                 st.subheader(f"📄 {result_data['original_name']}")
@@ -1069,12 +1084,12 @@ def qr_plate_processor():
                         data=result['excel_buffer'].getvalue(),
                         file_name=excel_filename,
                         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        key=f"excel_{result_data['base_name']}"
+                        key=f"excel_{idx}_{result_data['base_name']}"
                     )
                 
                 # Show debug image
                 with st.expander(f"🔍 View Annotated Image - {result_data['original_name']}"):
-                    st.image(result['debug_image'], caption=f"Processed plate with QR detection results", use_column_width=True)
+                    st.image(result['debug_image'], caption=f"Processed plate with QR detection results")
                 
                 st.markdown("---")
 
