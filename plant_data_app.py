@@ -12,6 +12,14 @@ from typing import List, Tuple, Optional
 import numpy as np
 from PIL import Image
 
+# Add HEIC/HEIF support
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    HEIF_AVAILABLE = True
+except ImportError:
+    HEIF_AVAILABLE = False
+
 # Try to import QR/CV libraries with fallback
 try:
     import cv2
@@ -922,12 +930,20 @@ def qr_plate_processor():
     
     # Step 3: Upload images
     st.header("📷 Step 3: Upload Plate Images")
+    
+    # Show HEIC support status
+    if HEIF_AVAILABLE:
+        st.success("✅ HEIC/HEIF image format support is available")
+    else:
+        st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
+        st.info("To add HEIC support, install: `pip install pillow-heif`")
+    
     uploaded_images = st.file_uploader(
         "Upload plate images",
         type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
         accept_multiple_files=True,
         key="plate_images",
-        help="Upload laboratory plate images for QR code extraction"
+        help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
     )
     
     if not uploaded_images:
