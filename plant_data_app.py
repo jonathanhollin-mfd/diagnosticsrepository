@@ -342,23 +342,30 @@ def fill_template(cleaned_df, template_file_buffer):
     return output_buffer
 
 def fill_headwaters_template(cleaned_df, template_file_buffer):
-    """Fill z-sheet template with Headwaters data (maps Clone Number to Clone)."""
+    """Fill z-sheet template with Headwaters data."""
     wb = load_workbook(template_file_buffer)
     ws = wb.active
 
+    # Map DataFrame columns to z-sheet columns
+    # DataFrame: Plant Code, Tube Code, Strain, Clone Number, Notes
+    # Z-sheet: Plant Code, Tube 1 *, Strain, Clone, Notes
     column_mapping = {
-        "Plant Code": "B",
-        "Tube Code": "C",
-        "Strain": "E",
-        "Clone Number": "F",  # Map Clone Number to Clone column
-        "Notes": "G"
+        "Plant Code": "B",      # Plant Code -> Plant Code
+        "Tube Code": "C",       # Tube Code -> Tube 1 *
+        "Strain": "E",          # Strain -> Strain
+        "Clone Number": "F",    # Clone Number -> Clone
+        "Notes": "G"            # Notes -> Notes
     }
 
     for i, row in cleaned_df.iterrows():
         excel_row = i + 2
         for col_name, col_letter in column_mapping.items():
             value = row[col_name]
-            ws[f"{col_letter}{excel_row}"] = value if value not in ["", "nan", "NaN"] else None
+            # Convert to string and clean up
+            if pd.isna(value) or value == "" or str(value).strip() == "":
+                ws[f"{col_letter}{excel_row}"] = None
+            else:
+                ws[f"{col_letter}{excel_row}"] = str(value).strip()
 
     output_buffer = io.BytesIO()
     wb.save(output_buffer)
@@ -437,10 +444,10 @@ def collect_headwaters_data_from_sheets(uploaded_file):
                     header_words = ['tube', 'plant', 'clone', 'strain', 'number', 'code']
                     if not any(word in tube_str.lower() for word in header_words):
                         tube_data.append([
-                            tube_str,
-                            str(plant_code).strip() if plant_code else "",
-                            str(clone_number).strip() if clone_number else "",
-                            str(strain).strip() if strain else "",
+                            str(plant_code).strip() if plant_code else "",  # Plant Code
+                            tube_str,                                        # Tube Code
+                            str(strain).strip() if strain else "",          # Strain
+                            str(clone_number).strip() if clone_number else "", # Clone Number
                             ""  # Empty notes column
                         ])
         
@@ -815,7 +822,7 @@ def excel_combiner():
                 return
             
             # Create DataFrame for template filling
-            final_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone Number", "Strain", "Notes"])
+            final_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone Number", "Notes"])
             
             # Fill the z-sheet template with Headwaters data
             output_buffer = fill_headwaters_template(final_df, template_buffer)
