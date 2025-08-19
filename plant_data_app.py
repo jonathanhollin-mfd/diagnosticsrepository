@@ -9,6 +9,14 @@ import io
 import base64
 import os
 from typing import List, Tuple, Optional
+import cv2
+import numpy as np
+from PIL import Image
+try:
+    from pyzbar.pyzbar import decode
+    QR_AVAILABLE = True
+except ImportError:
+    QR_AVAILABLE = False
 
 # ===================== CONFIGURATION =====================
 st.set_page_config(
@@ -98,7 +106,18 @@ st.markdown("""
     box-shadow: 0 6px 12px rgba(33,150,243,0.4) !important;
 }
 
-/* Individual download buttons */
+# QR Reader button styling
+.qr-button .stButton > button {
+    background-color: #9C27B0 !important;
+    color: white !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 4px 8px rgba(156,39,176,0.3) !important;
+}
+
+.qr-button .stButton > button:hover {
+    background-color: #7B1FA2 !important;
+    box-shadow: 0 6px 12px rgba(156,39,176,0.4) !important;
+}
 .stDownloadButton > button {
     width: 100% !important;
     height: 50px !important;
@@ -134,8 +153,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Template file location
+# Template file locations
 TEMPLATE_FILE = "z-sheet.xlsx"
+LAMP_TEMPLATE = "LAMP-X.xlsx"
+QPCR_TEMPLATE = "QPCR-X.xlsx"
 
 # ===================== PLANT DATA PROCESSOR FUNCTIONS =====================
 def standardize_tube(val):
@@ -414,9 +435,156 @@ def match_and_process(combined_df, reference_df):
     final_df.sort_values(by="__missing", inplace=True)
     final_df.drop(columns=["__missing"], inplace=True)
     
-    return final_df
+# ===================== QR CODE READER FUNCTIONS =====================
+def add_white_border(img, pixels=40):
+    """Add white border around image for better QR detection."""
+    return cv2.copyMakeBorder(
+        img, pixels, pixels, pixels, pixels,
+        cv2.BORDER_CONSTANT, value=[255, 255, 255]
+    )
 
-# ===================== STREAMLIT APP FUNCTIONS =====================
+def try_rotations(img, angles=(15, -15, 30, -30)):
+    """Try different rotations to improve QR detection."""
+    if not QR_AVAILABLE:
+        return None
+    
+    for angle in angles:
+        M = cv2.getRotationMatrix2D((img.shape[1] // 2, img.shape[0] // 2), angle, 1.0)
+        rotated = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), borderValue=(255, 255, 255))
+        result = decode(rotated)
+        if result:
+            return result
+    return None
+
+def process_plate_image(uploaded_image, template_buffer, plate_config):
+    """Process a single plate image to extract QR codes."""
+    if not QR_AVAILABLE:
+        return None, None, "QR code libraries not available. Please install opencv-python and pyzbar."
+    
+    try:
+        # Read image
+        image = Image.open(uploaded_image).convert("RGB")
+        img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Configuration
+        COLS = plate_config.get("cols", 8)
+        ROWS = plate_config.get("rows", 12)
+        MARGIN = plate_config.get("margin", 12)
+        CROP_WIDTH = plate_config.get("crop_width", 2180)
+        CROP_HEIGHT = plate_config.get("crop_height", 3940)
+        
+        # Crop image
+        img_h, img_w = img.shape[:2]
+        x = max(0, (img_w - CROP_WIDTH) // 2)
+        y = max(0, (img_h - CROP_HEIGHT) // 2)
+        
+        # Ensure we don't exceed image boundaries
+        x2 = min(x + CROP_WIDTH, img_w)
+        y2 = min(y + CROP_HEIGHT, img_h)
+        cropped_img = img[y:y2, x:x2]
+        
+        # Calculate cell dimensions
+        actual_width = cropped_img.shape[1]
+        actual_height = cropped_img.shape[0]
+        cell_w = actual_width // COLS
+        cell_h = actual_height // ROWS
+        
+        # Load template
+        wb = load_workbook(template_buffer)
+        ws = wb["samples"] if "samples" in wb.sheetnames else wb.active
+        
+        # Generate positions
+        col_labels = list("ABCDEFGH")
+        positions = [f"{col}{row+1}" for row in range(ROWS) for col in col_labels]
+        
+        # Create debug image
+        debug_img = cropped_img.copy()
+        results = []
+        
+        # Process each cell
+        for pos in positions:
+            row = int(pos[1:]) - 1
+            col = 7 - col_labels.index(pos[0])  # A1 top-right
+            
+            x0 = col * cell_w
+            y0 = row * cell_h
+            x1 = max(x0 - MARGIN, 0)
+            y1 = max(y0 - MARGIN, 0)
+            x2 = min(x0 + cell_w + MARGIN, actual_width)
+            y2 = min(y0 + cell_h + MARGIN, actual_height)
+            
+            # Extract cell
+            crop = cropped_img[y1:y2, x1:x2]
+            if crop.size == 0:
+                results.append((pos, ""))
+                continue
+                
+            crop = add_white_border(crop)
+            
+            # Process for QR detection
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            blur = cv2.GaussianBlur(gray, (3, 3), 0)
+            sharp = cv2.addWeighted(gray, 2.0, blur, -1.0, 0)
+            _, thresh = cv2.threshold(sharp, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
+            # Try QR detection
+            qrs = decode(crop) or decode(gray) or decode(thresh)
+            if not qrs:
+                qrs = try_rotations(crop) or try_rotations(gray) or try_rotations(thresh)
+            
+            if qrs:
+                qr_data = qrs[0].data.decode("utf-8").strip()
+                results.append((pos, qr_data))
+                cv2.putText(debug_img, f"{pos}: {qr_data}", (x1 + 3, y1 + 12),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 1)
+            else:
+                results.append((pos, ""))
+                cv2.putText(debug_img, f"{pos}: ---", (x1 + 3, y1 + 12),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+            
+            # Draw grid
+            cv2.rectangle(debug_img, (x1, y1), (x2, y2), (255, 0, 0), 1)
+            cv2.putText(debug_img, pos, (x1 + 5, y1 + 35),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+        
+        # Sort results and populate Excel
+        def well_sort_key(entry):
+            col = ord(entry[0][0]) - ord('A')
+            row = int(entry[0][1:])
+            return (row, col)
+        
+        results_sorted = sorted(results, key=well_sort_key)
+        for idx, (pos, code) in enumerate(results_sorted):
+            ws[f"B{idx + 2}"] = pos
+            ws[f"C{idx + 2}"] = code
+        
+        # Save Excel to buffer
+        excel_buffer = io.BytesIO()
+        wb.save(excel_buffer)
+        excel_buffer.seek(0)
+        
+        # Convert debug image to format for Streamlit
+        debug_img_rgb = cv2.cvtColor(debug_img, cv2.COLOR_BGR2RGB)
+        debug_img_pil = Image.fromarray(debug_img_rgb)
+        
+        # Calculate success metrics
+        total = len(results_sorted)
+        success = sum(1 for _, val in results_sorted if val.strip())
+        failed = total - success
+        failed_positions = [p for p, v in results_sorted if not v.strip()]
+        
+        return {
+            'excel_buffer': excel_buffer,
+            'debug_image': debug_img_pil,
+            'results': results_sorted,
+            'total': total,
+            'success': success,
+            'failed': failed,
+            'failed_positions': failed_positions
+        }, None, None
+        
+    except Exception as e:
+        return None, None, str(e)
 def plant_data_processor():
     """Plant Data Processor function."""
     st.markdown('<div class="nav-header">🌱 Plant Data Processor</div>', unsafe_allow_html=True)
@@ -604,20 +772,215 @@ def excel_combiner():
         except Exception as e:
             st.error(f"❌ Error during processing: {str(e)}")
 
-def function_3():
-    """Placeholder for third function."""
-    st.markdown('<div class="nav-header">⚙️ Function 3 - Coming Soon</div>', unsafe_allow_html=True)
+def qr_plate_processor():
+    """QR Code Plate Processor function."""
+    st.markdown('<div class="nav-header">🔍 QR Code Plate Processor</div>', unsafe_allow_html=True)
     
-    st.info("🚧 This function is under development. Please check back later!")
+    # Check if QR libraries are available
+    if not QR_AVAILABLE:
+        st.error("❌ QR Code processing requires additional libraries!")
+        st.markdown("""
+        To use this function, please install the required packages:
+        ```bash
+        pip install opencv-python pyzbar pillow
+        ```
+        """)
+        return
+    
+    # Check if template files exist
+    lamp_exists = check_template_exists(LAMP_TEMPLATE)
+    qpcr_exists = check_template_exists(QPCR_TEMPLATE)
+    
+    if not lamp_exists and not qpcr_exists:
+        st.error(f"❌ Template files not found in repository!")
+        st.info(f"Please ensure '{LAMP_TEMPLATE}' and/or '{QPCR_TEMPLATE}' are in the same directory as this application.")
+        return
+    
+    # Show available templates
+    st.success("✅ Template files found:")
+    col1, col2 = st.columns(2)
+    with col1:
+        if lamp_exists:
+            st.success(f"✅ {LAMP_TEMPLATE}")
+        else:
+            st.warning(f"⚠️ {LAMP_TEMPLATE} not found")
+    with col2:
+        if qpcr_exists:
+            st.success(f"✅ {QPCR_TEMPLATE}")
+        else:
+            st.warning(f"⚠️ {QPCR_TEMPLATE} not found")
     
     st.markdown("""
-    **Planned Features:**
-    - Additional data processing capabilities
-    - Advanced analytics and reporting
-    - Custom data transformations
+    This tool processes laboratory plate images to extract QR codes and populate Excel templates.
     
-    Stay tuned for updates! 🌱
+    **Process:**
+    1. Select template type (LAMP or QPCR)
+    2. Upload plate images to process
+    3. Configure plate settings
+    4. Process images to extract QR codes and generate filled Excel files
     """)
+    
+    # Step 1: Template selection
+    st.header("🧪 Step 1: Select Template Type")
+    template_options = []
+    if lamp_exists:
+        template_options.append("LAMP")
+    if qpcr_exists:
+        template_options.append("QPCR")
+    
+    if not template_options:
+        st.error("No valid templates available.")
+        return
+    
+    selected_template = st.radio(
+        "Choose template for processing:",
+        template_options,
+        key="template_choice",
+        help=f"Templates are loaded from the repository: {', '.join(template_options)}"
+    )
+    
+    # Step 2: Plate configuration
+    st.header("⚙️ Step 2: Plate Configuration")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        cols = st.number_input("Columns", min_value=1, max_value=24, value=8, key="plate_cols")
+    with col2:
+        rows = st.number_input("Rows", min_value=1, max_value=24, value=12, key="plate_rows")
+    with col3:
+        margin = st.number_input("Cell Margin", min_value=0, max_value=50, value=12, key="plate_margin")
+    with col4:
+        pass  # Spacer
+    
+    # Advanced settings
+    with st.expander("🔧 Advanced Crop Settings"):
+        col1, col2 = st.columns(2)
+        with col1:
+            crop_width = st.number_input("Crop Width", min_value=100, max_value=5000, value=2180, key="crop_width")
+        with col2:
+            crop_height = st.number_input("Crop Height", min_value=100, max_value=5000, value=3940, key="crop_height")
+    
+    plate_config = {
+        "cols": cols,
+        "rows": rows,
+        "margin": margin,
+        "crop_width": crop_width,
+        "crop_height": crop_height
+    }
+    
+    # Step 3: Upload images
+    st.header("📷 Step 3: Upload Plate Images")
+    uploaded_images = st.file_uploader(
+        "Upload plate images",
+        type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
+        accept_multiple_files=True,
+        key="plate_images",
+        help="Upload laboratory plate images for QR code extraction"
+    )
+    
+    if not uploaded_images:
+        st.info("Please upload plate images to process.")
+        return
+    
+    # Process button
+    st.markdown('<div class="big-action-button qr-button">', unsafe_allow_html=True)
+    process_clicked = st.button("🔍 Process Plate Images", key="process_plates")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    if process_clicked:
+        # Load the selected template
+        template_file = LAMP_TEMPLATE if selected_template == "LAMP" else QPCR_TEMPLATE
+        
+        results = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, uploaded_image in enumerate(uploaded_images):
+            status_text.text(f"Processing {uploaded_image.name}...")
+            
+            # Load fresh template buffer for each image
+            template_buffer = load_template_from_file(template_file)
+            if not template_buffer:
+                st.error(f"❌ Failed to load template file: {template_file}")
+                continue
+            
+            result, _, error = process_plate_image(uploaded_image, template_buffer, plate_config)
+            
+            if error:
+                st.error(f"❌ Error processing {uploaded_image.name}: {error}")
+            elif result:
+                base_name = uploaded_image.name.rsplit('.', 1)[0]
+                results.append({
+                    'original_name': uploaded_image.name,
+                    'base_name': base_name,
+                    'result': result
+                })
+                st.success(f"✅ Successfully processed {uploaded_image.name}")
+            
+            progress_bar.progress((i + 1) / len(uploaded_images))
+        
+        status_text.text("Processing complete!")
+        
+        if results:
+            st.header("📊 Processing Results")
+            
+            # Overall statistics
+            total_plates = len(results)
+            total_wells = sum(result['result']['total'] for result in results)
+            total_success = sum(result['result']['success'] for result in results)
+            total_failed = total_wells - total_success
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Plates Processed", total_plates)
+            with col2:
+                st.metric("Total Wells", total_wells)
+            with col3:
+                st.metric("Successful Reads", total_success)
+            with col4:
+                st.metric("Failed Reads", total_failed)
+            
+            st.header("📥 Download Results")
+            
+            # Individual results
+            for result_data in results:
+                result = result_data['result']
+                
+                st.subheader(f"📄 {result_data['original_name']}")
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    # Statistics
+                    success_rate = (result['success'] / result['total']) * 100 if result['total'] > 0 else 0
+                    st.write(f"**Success Rate:** {success_rate:.1f}% ({result['success']}/{result['total']})")
+                    st.write(f"**Template Used:** {selected_template}")
+                    
+                    if result['failed'] > 0:
+                        st.write(f"**Failed Wells:** {', '.join(result['failed_positions'][:10])}")
+                        if len(result['failed_positions']) > 10:
+                            st.write(f"... and {len(result['failed_positions']) - 10} more")
+                
+                with col2:
+                    # Download Excel
+                    excel_filename = f"{result_data['base_name']}_{selected_template}_filled.xlsx"
+                    st.download_button(
+                        label="📥 Download Excel",
+                        data=result['excel_buffer'].getvalue(),
+                        file_name=excel_filename,
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        key=f"excel_{result_data['base_name']}"
+                    )
+                
+                # Show debug image
+                with st.expander(f"🔍 View Annotated Image - {result_data['original_name']}"):
+                    st.image(result['debug_image'], caption=f"Processed plate with QR detection results", use_column_width=True)
+                
+                st.markdown("---")
+
+def function_3():
+    """QR Code Plate Processor function (renamed from placeholder)."""
+    return qr_plate_processor()
 
 def main():
     """Main application function."""
@@ -631,7 +994,7 @@ def main():
         [
             "🌱 Plant Data Processor", 
             "📋 Excel Combiner & Processor",
-            "⚙️ Function 3"
+            "🔍 QR Code Plate Processor"
         ],
         key="main_nav"
     )
@@ -656,10 +1019,10 @@ def main():
         """)
     else:
         st.sidebar.markdown("""
-        **⚙️ Function 3**
-        - Coming soon!
-        - Advanced processing features
-        - Custom data transformations
+        **🔍 QR Code Plate Processor**
+        - Process laboratory plate images
+        - Extract QR codes automatically
+        - Generate filled Excel templates
         """)
     
     # Route to appropriate function
@@ -667,8 +1030,8 @@ def main():
         plant_data_processor()
     elif "Excel Combiner" in app_mode:
         excel_combiner()
-    elif "Function 3" in app_mode:
-        function_3()
+    elif "QR Code Plate Processor" in app_mode:
+        qr_plate_processor()
 
 if __name__ == "__main__":
     main()
