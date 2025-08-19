@@ -4,7 +4,6 @@ import re
 from datetime import datetime
 from openpyxl import load_workbook
 import io
-import zipfile
 import base64
 
 # ===================== CONFIGURATION =====================
@@ -21,15 +20,15 @@ st.markdown("""
 /* Big action buttons (Process and Download) */
 .big-action-button .stButton > button {
     width: 100% !important;
-    height: 120px !important;
-    font-size: 32px !important;
+    height: 150px !important;
+    font-size: 36px !important;
     font-weight: bold !important;
     border: none !important;
-    border-radius: 16px !important;
+    border-radius: 20px !important;
     cursor: pointer !important;
     transition: all 0.3s !important;
-    padding: 25px 40px !important;
-    margin: 15px 0 !important;
+    padding: 30px 50px !important;
+    margin: 20px 0 !important;
 }
 
 .big-action-button .stButton > button:hover {
@@ -87,25 +86,25 @@ st.markdown("""
 /* Bulk download button */
 .bulk-download .stDownloadButton > button {
     width: 100% !important;
-    height: 120px !important;
-    font-size: 32px !important;
+    height: 150px !important;
+    font-size: 36px !important;
     font-weight: bold !important;
     background-color: #2196F3 !important;
     color: white !important;
     border: none !important;
-    border-radius: 16px !important;
+    border-radius: 20px !important;
     cursor: pointer !important;
     transition: all 0.3s !important;
     margin: 20px 0 !important;
-    padding: 25px 40px !important;
+    padding: 30px 50px !important;
     text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important;
-    box-shadow: 0 8px 16px rgba(33,150,243,0.4) !important;
+    box-shadow: 0 10px 20px rgba(33,150,243,0.4) !important;
 }
 
 .bulk-download .stDownloadButton > button:hover {
     background-color: #1976D2 !important;
-    transform: translateY(-5px) !important;
-    box-shadow: 0 12px 24px rgba(33,150,243,0.5) !important;
+    transform: translateY(-6px) !important;
+    box-shadow: 0 15px 30px rgba(33,150,243,0.6) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -373,8 +372,8 @@ def main():
     # Processing section
     st.header("⚙️ Processing Results")
     
-    # Center the process button
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Center the process button with better spacing
+    col1, col2, col3 = st.columns([0.5, 3, 0.5])
     
     with col2:
         st.markdown('<div class="big-action-button process-button">', unsafe_allow_html=True)
@@ -428,26 +427,45 @@ def main():
                 total_rows = sum(len(result['data']) for result in results)
                 st.metric("Total Rows Processed", total_rows)
             
-            # Create ZIP file for bulk download
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Individual file downloads
+            st.subheader("Download Files")
+            
+            # If only one file, show one large download button
+            if len(results) == 1:
+                result = results[0]
+                col1, col2, col3 = st.columns([0.5, 3, 0.5])
+                with col2:
+                    st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
+                    st.download_button(
+                        label=f"📥 Download {result['output_name']}",
+                        data=result['file_buffer'].getvalue(),
+                        file_name=result['output_name'],
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+                    st.markdown('</div>', unsafe_allow_html=True)
+            
+            # If multiple files, show individual download buttons
+            else:
                 for result in results:
-                    zip_file.writestr(result['output_name'], result['file_buffer'].getvalue())
-            
-            zip_buffer.seek(0)
-            
-            # One large download button
-            st.subheader("Download All Files")
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
-                st.download_button(
-                    label="📦 Download All Files (ZIP)",
-                    data=zip_buffer.getvalue(),
-                    file_name="processed_plant_data.zip",
-                    mime="application/zip"
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
+                    col1, col2, col3 = st.columns([1.5, 0.5, 2])
+                    
+                    with col1:
+                        st.text(f"📄 {result['output_name']}")
+                        st.text(f"Rows: {len(result['data'])}")
+                    
+                    with col2:
+                        st.text("")  # Spacer
+                    
+                    with col3:
+                        st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
+                        st.download_button(
+                            label="📥 Download",
+                            data=result['file_buffer'].getvalue(),
+                            file_name=result['output_name'],
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            key=f"download_{result['output_name']}"
+                        )
+                        st.markdown('</div>', unsafe_allow_html=True)
             
             # Show file previews without download buttons
             st.subheader("Processed Files Preview")
