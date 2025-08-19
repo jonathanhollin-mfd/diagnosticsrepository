@@ -168,6 +168,10 @@ TEMPLATE_FILE = "z-sheet.xlsx"
 LAMP_TEMPLATE = "LAMP-X.xlsx"
 QPCR_TEMPLATE = "QPCR-X.xlsx"
 
+def check_template_exists(template_file):
+    """Check if a template file exists in the repository."""
+    return os.path.exists(template_file)
+
 # ===================== PLANT DATA PROCESSOR FUNCTIONS =====================
 def standardize_tube(val):
     """Normalize Tube Code to exactly 'TUBE <digits>'."""
