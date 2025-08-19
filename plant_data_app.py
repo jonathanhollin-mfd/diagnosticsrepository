@@ -1008,7 +1008,39 @@ def qr_plate_processor():
             with col4:
                 st.metric("Failed Reads", total_failed)
             
+            # Bulk download section
             st.header("📥 Download Results")
+            
+            # Create ZIP file for bulk download
+            import zipfile
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for result_data in results:
+                    result = result_data['result']
+                    base_name = result_data['base_name']
+                    excel_filename = f"{base_name}_{selected_template}_filled.xlsx"
+                    
+                    # Add Excel file to ZIP
+                    zip_file.writestr(excel_filename, result['excel_buffer'].getvalue())
+            
+            zip_buffer.seek(0)
+            
+            # Bulk download button
+            st.subheader("📦 Download All Files")
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.markdown('<div class="big-action-button download-button">', unsafe_allow_html=True)
+                st.download_button(
+                    label="📦 Download All Files (ZIP)",
+                    data=zip_buffer.getvalue(),
+                    file_name=f"QR_Processing_Results_{selected_template}.zip",
+                    mime="application/zip",
+                    key="bulk_download_qr"
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown("---")
+            st.subheader("📄 Individual Files")
             
             # Individual results
             for result_data in results:
