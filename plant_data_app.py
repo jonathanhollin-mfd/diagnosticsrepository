@@ -341,6 +341,30 @@ def fill_template(cleaned_df, template_file_buffer):
     output_buffer.seek(0)
     return output_buffer
 
+def fill_headwaters_template(cleaned_df, template_file_buffer):
+    """Fill z-sheet template with Headwaters data (maps Clone Number to Clone)."""
+    wb = load_workbook(template_file_buffer)
+    ws = wb.active
+
+    column_mapping = {
+        "Plant Code": "B",
+        "Tube Code": "C",
+        "Strain": "E",
+        "Clone Number": "F",  # Map Clone Number to Clone column
+        "Notes": "G"
+    }
+
+    for i, row in cleaned_df.iterrows():
+        excel_row = i + 2
+        for col_name, col_letter in column_mapping.items():
+            value = row[col_name]
+            ws[f"{col_letter}{excel_row}"] = value if value not in ["", "nan", "NaN"] else None
+
+    output_buffer = io.BytesIO()
+    wb.save(output_buffer)
+    output_buffer.seek(0)
+    return output_buffer
+
 def process_single_file(uploaded_file, filename, template_buffer):
     """Process a single uploaded file."""
     try:
@@ -778,7 +802,7 @@ def excel_combiner():
             st.success(f"✅ Removed {duplicates_removed} duplicates, {len(unique_data)} unique entries remain")
             
             # Step 3: Create combined DataFrame
-            combined_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone #", "Strain", "Notes"])
+            combined_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone Number", "Strain", "Notes"])
             
             # Step 4: Create final z-sheet
             st.info("📖 Creating final z-sheet...")
@@ -790,10 +814,10 @@ def excel_combiner():
                 return
             
             # Create DataFrame for template filling
-            final_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone #", "Strain", "Notes"])
+            final_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone Number", "Strain", "Notes"])
             
-            # Fill the z-sheet template
-            output_buffer = fill_template(final_df, template_buffer)
+            # Fill the z-sheet template with Headwaters data
+            output_buffer = fill_headwaters_template(final_df, template_buffer)
             st.success(f"✅ Processing complete! Final z-sheet has {len(final_df)} entries")
             
             # Save results
