@@ -430,15 +430,19 @@ def collect_headwaters_data_from_sheets(uploaded_file):
                 clone_number = sheet.cell(row=row_num, column=col_indices.get("Clone Number", 3)).value
                 strain = sheet.cell(row=row_num, column=col_indices.get("Strain", 4)).value
                 
-                # Only add rows with tube data
+                # Only add rows with tube data and ensure it's not a header
                 if tube_value and str(tube_value).strip():
-                    tube_data.append([
-                        str(tube_value).strip(),
-                        str(plant_code).strip() if plant_code else "",
-                        str(clone_number).strip() if clone_number else "",
-                        str(strain).strip() if strain else "",
-                        f"Sheet: {sheet_name}"  # Add sheet name as note
-                    ])
+                    tube_str = str(tube_value).strip()
+                    # Skip if this looks like a header (contains common header words)
+                    header_words = ['tube', 'plant', 'clone', 'strain', 'number', 'code']
+                    if not any(word in tube_str.lower() for word in header_words):
+                        tube_data.append([
+                            tube_str,
+                            str(plant_code).strip() if plant_code else "",
+                            str(clone_number).strip() if clone_number else "",
+                            str(strain).strip() if strain else "",
+                            ""  # Empty notes column
+                        ])
         
     except Exception as e:
         st.error(f"Error processing file: {str(e)}")
@@ -801,10 +805,7 @@ def excel_combiner():
             duplicates_removed = len(tube_data) - len(unique_data)
             st.success(f"✅ Removed {duplicates_removed} duplicates, {len(unique_data)} unique entries remain")
             
-            # Step 3: Create combined DataFrame
-            combined_df = pd.DataFrame(unique_data, columns=["Tube Code", "Plant Code", "Clone Number", "Strain", "Notes"])
-            
-            # Step 4: Create final z-sheet
+            # Step 3: Create final z-sheet
             st.info("📖 Creating final z-sheet...")
             
             # Load template buffer
@@ -833,7 +834,7 @@ def excel_combiner():
             with col2:
                 st.metric("After Deduplication", len(unique_data))
             with col3:
-                st.metric("Final Z-Sheet Entries", len(final_df))
+                st.metric("Final Z-Sheet Entries", len(unique_data))
             
             # Download button
             st.header("📥 Download Z-Sheet")
@@ -846,10 +847,6 @@ def excel_combiner():
                 key="download_final"
             )
             st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Preview
-            st.header("👀 Data Preview")
-            st.dataframe(final_df.head(20), use_container_width=True)
             
         except Exception as e:
             st.error(f"❌ Error during processing: {str(e)}")
