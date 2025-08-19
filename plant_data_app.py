@@ -821,11 +821,6 @@ def excel_combiner():
             output_buffer = fill_headwaters_template(final_df, template_buffer)
             st.success(f"✅ Processing complete! Final z-sheet has {len(final_df)} entries")
             
-            # Save results
-            output_buffer = io.BytesIO()
-            final_df.to_excel(output_buffer, index=False)
-            output_buffer.seek(0)
-            
             # Display results
             st.header("📊 Results Summary")
             col1, col2, col3 = st.columns(3)
