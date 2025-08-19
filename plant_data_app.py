@@ -712,22 +712,8 @@ def excel_combiner():
     
     **Process:**
     1. Upload multiple Excel files to combine
-    2. Use z-sheet.xlsx template from repository as reference file
-    3. The tool will extract tube data, remove duplicates, and create a final processed file
+    2. The tool will extract tube data, remove duplicates, and match against the z-sheet template
     """)
-    
-    # Step 1: Upload files to combine
-    st.header("📁 Step 1: Upload Files to Combine")
-    combine_files = st.file_uploader(
-        "Upload Excel files to combine (.xls or .xlsx)",
-        type=['xls', 'xlsx'],
-        accept_multiple_files=True,
-        key="combine_files",
-        help="These files will be combined and processed"
-    )
-    
-    # Step 2: Reference file check
-    st.header("📄 Step 2: Reference File")
     
     # Check if template file exists in repository
     if not check_template_exists(TEMPLATE_FILE):
@@ -736,6 +722,16 @@ def excel_combiner():
         return
     
     st.success(f"✅ Reference file '{TEMPLATE_FILE}' found in repository!")
+    
+    # Upload files to combine
+    st.header("📁 Upload Files to Combine")
+    combine_files = st.file_uploader(
+        "Upload Excel files to combine (.xls or .xlsx)",
+        type=['xls', 'xlsx'],
+        accept_multiple_files=True,
+        key="combine_files",
+        help="These files will be combined and processed"
+    )
     
     if not combine_files:
         st.info("Please upload files to combine.")
