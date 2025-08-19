@@ -87,23 +87,25 @@ st.markdown("""
 /* Bulk download button */
 .bulk-download .stDownloadButton > button {
     width: 100% !important;
-    height: 80px !important;
-    font-size: 24px !important;
+    height: 120px !important;
+    font-size: 32px !important;
     font-weight: bold !important;
     background-color: #2196F3 !important;
     color: white !important;
     border: none !important;
-    border-radius: 12px !important;
+    border-radius: 16px !important;
     cursor: pointer !important;
     transition: all 0.3s !important;
     margin: 20px 0 !important;
-    padding: 15px 30px !important;
+    padding: 25px 40px !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 8px 16px rgba(33,150,243,0.4) !important;
 }
 
 .bulk-download .stDownloadButton > button:hover {
     background-color: #1976D2 !important;
-    transform: translateY(-3px) !important;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.3) !important;
+    transform: translateY(-5px) !important;
+    box-shadow: 0 12px 24px rgba(33,150,243,0.5) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -371,17 +373,12 @@ def main():
     # Processing section
     st.header("⚙️ Processing Results")
     
-    # Create two columns for the big action buttons
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown('<div class="big-action-button process-button">', unsafe_allow_html=True)
-        process_clicked = st.button("🚀 Process All Files", type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Center the process button
+    col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown('<div class="big-action-button download-button">', unsafe_allow_html=True)
-        download_clicked = st.button("📥 Download Results", type="primary")
+        st.markdown('<div class="big-action-button process-button">', unsafe_allow_html=True)
+        process_clicked = st.button("🚀 Process All Files", type="primary")
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Initialize session state for results
@@ -416,51 +413,22 @@ def main():
         
         status_text.text("Processing complete!")
         
-        # Store results in session state
+        # Store results in session state and show download options immediately
         if results:
             st.session_state.processed_results = results
-            st.success(f"✅ Successfully processed {len(results)} files! Click 'Download Results' to download.")
-    
-    # Handle download button
-    if download_clicked and st.session_state.processed_results:
-        results = st.session_state.processed_results
-        
-        st.header("📥 Download Results")
-        
-        # Show summary
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Files Processed", len(results))
-        with col2:
-            total_rows = sum(len(result['data']) for result in results)
-            st.metric("Total Rows Processed", total_rows)
-        
-        # Individual file downloads
-        st.subheader("Individual Files")
-        for result in results:
-            col1, col2, col3 = st.columns([2, 1, 1])
+            st.success(f"✅ Successfully processed {len(results)} files!")
             
+            st.header("📥 Download Results")
+            
+            # Show summary
+            col1, col2 = st.columns(2)
             with col1:
-                st.text(f"📄 {result['output_name']}")
-                with st.expander(f"Preview data from {result['original_name']}"):
-                    st.dataframe(result['data'].head(10), use_container_width=True)
-            
+                st.metric("Files Processed", len(results))
             with col2:
-                st.metric("Rows", len(result['data']))
+                total_rows = sum(len(result['data']) for result in results)
+                st.metric("Total Rows Processed", total_rows)
             
-            with col3:
-                st.download_button(
-                    label="⬇️ Download",
-                    data=result['file_buffer'].getvalue(),
-                    file_name=result['output_name'],
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-        
-        # Bulk download option
-        if len(results) > 1:
-            st.subheader("Bulk Download")
-            
-            # Create ZIP file
+            # Create ZIP file for bulk download
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                 for result in results:
@@ -468,8 +436,10 @@ def main():
             
             zip_buffer.seek(0)
             
-            # Container for bulk download with custom styling
-            with st.container():
+            # One large download button
+            st.subheader("Download All Files")
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
                 st.markdown('<div class="bulk-download">', unsafe_allow_html=True)
                 st.download_button(
                     label="📦 Download All Files (ZIP)",
@@ -478,9 +448,13 @@ def main():
                     mime="application/zip"
                 )
                 st.markdown('</div>', unsafe_allow_html=True)
-    
-    elif download_clicked and not st.session_state.processed_results:
-        st.warning("⚠️ Please process files first before downloading results.")
+            
+            # Show file previews without download buttons
+            st.subheader("Processed Files Preview")
+            for result in results:
+                with st.expander(f"📄 {result['output_name']} ({len(result['data'])} rows)"):
+                    st.dataframe(result['data'].head(10), use_container_width=True)
+                    st.text(f"Original file: {result['original_name']}")
     
     # Data preview section
     if uploaded_files:
