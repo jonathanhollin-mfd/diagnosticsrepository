@@ -412,7 +412,7 @@ def remove_duplicates(tube_data):
     
     return unique_data
 
-def normalize_tube_ids(df, column="Tube ID"):
+def normalize_tube_ids(df, column="Tube 1"):
     """Normalize tube IDs for matching."""
     df = df.copy()
     df["_normalized_tube"] = df[column].astype(str).str.strip().str.lower()
@@ -433,7 +433,7 @@ def match_and_process(combined_df, reference_df):
     
     for _, row in combined_df.iterrows():
         tube_id_norm = row["_normalized_tube"]
-        original_tube_id = row["Tube ID"]
+        original_tube_id = row["Tube 1"]
         
         if tube_id_norm in ref_lookup.index:
             matched_row = ref_lookup.loc[tube_id_norm]
@@ -450,7 +450,7 @@ def match_and_process(combined_df, reference_df):
             plant_code = extract_plant_code(original_tube_id)
             new_row = {
                 "Plant Code": plant_code,
-                "Tube ID": original_tube_id,
+                "Tube 1": original_tube_id,
                 "Clone #": "",
                 "Strain": "",
                 "Notes": "Tube missing from reference Excel sheet",
@@ -462,7 +462,7 @@ def match_and_process(combined_df, reference_df):
     
     # Reorder columns and add empty column
     final_df.insert(2, " ", "")
-    final_df = final_df[["Plant Code", "Tube ID", " ", "Strain", "Clone #", "Notes", "__missing"]]
+    final_df = final_df[["Plant Code", "Tube 1", " ", "Strain", "Clone #", "Notes", "__missing"]]
     
     # Sort missing tubes to bottom
     final_df.sort_values(by="__missing", inplace=True)
@@ -756,7 +756,7 @@ def excel_combiner():
             st.success(f"✅ Removed {duplicates_removed} duplicates, {len(unique_data)} unique entries remain")
             
             # Step 3: Create combined DataFrame
-            combined_df = pd.DataFrame(unique_data, columns=["Tube ID", "Plant Code", "Clone #", "Strain", "Notes"])
+            combined_df = pd.DataFrame(unique_data, columns=["Tube 1", "Plant Code", "Clone #", "Strain", "Notes"])
             
             # Step 4: Load reference file
             st.info("📖 Loading reference file...")
