@@ -342,27 +342,27 @@ def fill_template(cleaned_df, template_file_buffer):
     return output_buffer
 
 def fill_headwaters_template(cleaned_df, template_file_buffer):
-    """Fill z-sheet template with Headwaters data."""
+    """Fill z-sheet template with Headwaters data - FIXED VERSION."""
     wb = load_workbook(template_file_buffer)
     ws = wb.active
 
-    # Map DataFrame columns to z-sheet columns
-    # DataFrame: Plant Code, Tube Code, , Strain, Clone #, Notes
-    # Z-sheet: Plant Code, Tube 1 *, Strain, Clone, Notes
+    # Column mapping for z-sheet template
     column_mapping = {
-        "Plant Code": "B",      # Plant Code -> Plant Code
-        "Tube Code": "C",       # Tube Code -> Tube 1 *
-        "Strain": "E",          # Strain -> Strain
-        "Clone #": "F",         # Clone # -> Clone
-        "Notes": "G"            # Notes -> Notes
+        "Plant Code": "B",      # Plant Code -> Column B
+        "Tube Code": "C",       # Tube Code -> Column C (Tube 1 *)
+        "Strain": "E",          # Strain -> Column E
+        "Clone": "F",           # Clone -> Column F
+        "Notes": "G"            # Notes -> Column G
     }
 
     for i, row in cleaned_df.iterrows():
-        excel_row = i + 2
+        excel_row = i + 2  # Start from row 2 (row 1 is header)
+        
         for col_name, col_letter in column_mapping.items():
-            value = row[col_name]
-            # Convert to string and clean up
-            if pd.isna(value) or value == "" or str(value).strip() == "":
+            value = row.get(col_name, "")
+            
+            # Clean up the value
+            if pd.isna(value) or value == "" or str(value).strip() in ["", "nan", "None"]:
                 ws[f"{col_letter}{excel_row}"] = None
             else:
                 ws[f"{col_letter}{excel_row}"] = str(value).strip()
@@ -395,7 +395,7 @@ def process_single_file(uploaded_file, filename, template_buffer):
 
 # ===================== EXCEL COMBINER FUNCTIONS =====================
 def collect_headwaters_data_from_sheets(uploaded_file):
-    """Collect data from all sheets in a Bad Client Excel Sheet - adapted from combine2.py."""
+    """Collect data from all sheets in a Bad Client Excel Sheet - FIXED VERSION."""
     tube_data = []
     
     try:
@@ -408,41 +408,79 @@ def collect_headwaters_data_from_sheets(uploaded_file):
             
             # Find the header row (look for expected column names)
             header_row = None
+            col_indices = {}
+            
             for row_num in range(1, min(20, sheet.max_row + 1)):  # Check first 20 rows
-                row_values = [str(cell.value).strip() if cell.value else "" for cell in sheet[row_num]]
-                if any("tube" in val.lower() for val in row_values) and any("plant" in val.lower() for val in row_values):
+                row_values = [str(cell.value).strip().lower() if cell.value else "" for cell in sheet[row_num]]
+                
+                # Look for tube and plant columns
+                has_tube = any("tube" in val for val in row_values)
+                has_plant = any("plant" in val for val in row_values)
+                
+                if has_tube and has_plant:
                     header_row = row_num
+                    
+                    # Map column indices
+                    for col_num, cell in enumerate(sheet[row_num], 1):
+                        cell_value = str(cell.value).strip().lower() if cell.value else ""
+                        if "tube" in cell_value:
+                            col_indices["Tube"] = col_num
+                        elif "plant" in cell_value:
+                            col_indices["Plant Code"] = col_num
+                        elif "clone" in cell_value:
+                            col_indices["Clone"] = col_num
+                        elif "strain" in cell_value:
+                            col_indices["Strain"] = col_num
                     break
             
             if header_row is None:
-                continue  # Skip sheets without expected headers
+                st.warning(f"No valid header found in sheet '{sheet_name}' - skipping")
+                continue
             
-            # Get column indices - match original script column structure
-            col_indices = {}
-            for col_num, cell in enumerate(sheet[header_row], 1):
-                cell_value = str(cell.value).strip().lower() if cell.value else ""
-                if "tube" in cell_value:
-                    col_indices["Tube"] = col_num
-                elif "plant" in cell_value:
-                    col_indices["Plant Code"] = col_num
-                elif "clone" in cell_value:
-                    col_indices["Clone #"] = col_num  # Match original script column name
-                elif "strain" in cell_value:
-                    col_indices["Strain"] = col_num
+            st.info(f"Processing sheet '{sheet_name}' - found header at row {header_row}")
             
-            # Process data rows - extract from column C (Tube) as in original script
+            # Process data rows
+            rows_processed = 0
             for row_num in range(header_row + 1, sheet.max_row + 1):
-                # Use column C (3) for tube data as in original combine2.py
-                tube_value = sheet.cell(row=row_num, column=3).value
+                # Get values from each column
+                tube_value = ""
+                plant_code = ""
+                clone_value = ""
+                strain_value = ""
+                
+                # Extract data based on found column indices
+                if "Tube" in col_indices:
+                    tube_cell = sheet.cell(row=row_num, column=col_indices["Tube"])
+                    tube_value = str(tube_cell.value).strip() if tube_cell.value else ""
+                
+                if "Plant Code" in col_indices:
+                    plant_cell = sheet.cell(row=row_num, column=col_indices["Plant Code"])
+                    plant_code = str(plant_cell.value).strip() if plant_cell.value else ""
+                
+                if "Clone" in col_indices:
+                    clone_cell = sheet.cell(row=row_num, column=col_indices["Clone"])
+                    clone_value = str(clone_cell.value).strip() if clone_cell.value else ""
+                
+                if "Strain" in col_indices:
+                    strain_cell = sheet.cell(row=row_num, column=col_indices["Strain"])
+                    strain_value = str(strain_cell.value).strip() if strain_cell.value else ""
                 
                 # Only add rows with tube data and ensure it's not a header
-                if tube_value and str(tube_value).strip():
-                    tube_str = str(tube_value).strip()
+                if tube_value and tube_value not in ["", "nan", "None"]:
                     # Skip if this looks like a header (contains common header words)
                     header_words = ['tube', 'plant', 'clone', 'strain', 'number', 'code']
-                    if not any(word in tube_str.lower() for word in header_words):
-                        # Match original script structure: [tube_value, "", "", "", ""]
-                        tube_data.append([tube_str, "", "", "", ""])
+                    if not any(word in tube_value.lower() for word in header_words):
+                        # Create data row with proper structure: [Plant Code, Tube Code, Strain, Clone, Notes]
+                        tube_data.append([
+                            plant_code,     # Plant Code
+                            tube_value,     # Tube Code  
+                            strain_value,   # Strain
+                            clone_value,    # Clone
+                            ""              # Notes (empty)
+                        ])
+                        rows_processed += 1
+            
+            st.success(f"Extracted {rows_processed} rows from sheet '{sheet_name}'")
         
     except Exception as e:
         st.error(f"Error processing file: {str(e)}")
@@ -450,13 +488,13 @@ def collect_headwaters_data_from_sheets(uploaded_file):
     return tube_data
 
 def remove_duplicates(tube_data):
-    """Remove duplicate tube entries - match original script logic."""
+    """Remove duplicate tube entries - FIXED VERSION."""
     seen = set()
     unique_data = []
     
     for row in tube_data:
         tube_id = row[1]  # Tube Code is in position 1 (second column)
-        if tube_id not in seen:
+        if tube_id and tube_id not in seen:
             seen.add(tube_id)
             unique_data.append(row)
     
@@ -473,10 +511,14 @@ def extract_plant_code(tube_id):
     match = re.search(r'(\d+)', str(tube_id))
     return match.group(1) if match else ""
 
-def match_and_process(combined_df, reference_df):
-    """Match combined data with reference file and process - adapted from excel_cleanup2_final_autofill_plantcode.py."""
-    combined_df = normalize_tube_ids(combined_df)
-    reference_df = normalize_tube_ids(reference_df)
+def match_and_process_headwaters(combined_df, reference_df):
+    """Match combined data with reference file and process - FIXED VERSION."""
+    # Normalize tube IDs for matching
+    combined_df = combined_df.copy()
+    reference_df = reference_df.copy()
+    
+    combined_df["_normalized_tube"] = combined_df["Tube Code"].astype(str).str.strip().str.lower()
+    reference_df["_normalized_tube"] = reference_df["Tube Code"].astype(str).str.strip().str.lower()
     
     ref_lookup = reference_df.set_index("_normalized_tube")
     final_rows = []
@@ -486,33 +528,40 @@ def match_and_process(combined_df, reference_df):
         original_tube_id = row["Tube Code"]
         
         if tube_id_norm in ref_lookup.index:
+            # Found match in reference
             matched_row = ref_lookup.loc[tube_id_norm]
             if isinstance(matched_row, pd.DataFrame):
                 matched_row = matched_row.iloc[0]
-            matched_row = matched_row.drop(labels=["_normalized_tube"], errors="ignore")
+            
+            # Create final row with reference data
+            final_row = {
+                "Plant Code": matched_row.get("Plant Code", row["Plant Code"]),
+                "Tube Code": original_tube_id,
+                "Strain": matched_row.get("Strain", row["Strain"]),
+                "Clone": matched_row.get("Clone", row["Clone"]),
+                "Notes": matched_row.get("Notes", row["Notes"])
+            }
             
             # Auto-fill plant code if missing
-            if pd.isna(matched_row.get("Plant Code", None)) or str(matched_row.get("Plant Code")).strip() == "":
-                matched_row["Plant Code"] = extract_plant_code(original_tube_id)
-            matched_row["__missing"] = False
-            final_rows.append(matched_row)
+            if pd.isna(final_row["Plant Code"]) or str(final_row["Plant Code"]).strip() == "":
+                final_row["Plant Code"] = extract_plant_code(original_tube_id)
+            
+            final_row["__missing"] = False
+            final_rows.append(pd.Series(final_row))
         else:
-            plant_code = extract_plant_code(original_tube_id)
+            # No match found - create new entry
+            plant_code = row["Plant Code"] if row["Plant Code"] else extract_plant_code(original_tube_id)
             new_row = {
                 "Plant Code": plant_code,
                 "Tube Code": original_tube_id,
-                "Clone #": "",
-                "Strain": "",
+                "Strain": row["Strain"],
+                "Clone": row["Clone"],
                 "Notes": "Tube missing from reference Excel sheet",
                 "__missing": True
             }
             final_rows.append(pd.Series(new_row))
     
     final_df = pd.DataFrame(final_rows)
-    
-    # Reorder columns and add empty column
-    final_df.insert(2, " ", "")
-    final_df = final_df[["Plant Code", "Tube Code", " ", "Strain", "Clone #", "Notes", "__missing"]]
     
     # Sort missing tubes to bottom
     final_df.sort_values(by="__missing", inplace=True)
@@ -756,7 +805,7 @@ def plant_data_processor():
                     )
 
 def excel_combiner():
-    """Headwaters Submission function."""
+    """Headwaters Submission function - FIXED VERSION."""
     st.markdown('<div class="nav-header">🌊 Headwaters Submission</div>', unsafe_allow_html=True)
     
     st.markdown("""
@@ -813,13 +862,22 @@ def excel_combiner():
             tube_data = collect_headwaters_data_from_sheets(bad_client_sheet)
             st.success(f"✅ Collected {len(tube_data)} total entries from all sheets")
             
+            # Debug: Show sample of collected data
+            if tube_data:
+                st.info("📋 Sample of collected data:")
+                sample_df = pd.DataFrame(tube_data[:5], columns=["Plant Code", "Tube Code", "Strain", "Clone", "Notes"])
+                st.dataframe(sample_df)
+            
             # Step 2: Remove duplicates
             st.info("🧹 Removing duplicates...")
             unique_data = remove_duplicates(tube_data)
             duplicates_removed = len(tube_data) - len(unique_data)
             st.success(f"✅ Removed {duplicates_removed} duplicates, {len(unique_data)} unique entries remain")
             
-            # Step 3: Process data (with or without reference file)
+            # Step 3: Create DataFrame with proper column names
+            combined_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone", "Notes"])
+            
+            # Step 4: Process data (with or without reference file)
             if reference_sheet:
                 # Load reference data and match
                 st.info("📋 Loading reference data for matching...")
@@ -827,18 +885,25 @@ def excel_combiner():
                 st.success(f"✅ Loaded reference data with {len(reference_df)} entries")
                 
                 st.info("🔗 Matching data with reference file...")
-                combined_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone #", "Notes"])
-                
-                # Match and process data
-                final_df = match_and_process(combined_df, reference_df)
+                final_df = match_and_process_headwaters(combined_df, reference_df)
                 st.success(f"✅ Matching complete! Final dataset has {len(final_df)} entries")
             else:
                 # No reference file - use collected data directly
                 st.info("📋 No reference file provided - using collected data directly...")
-                final_df = pd.DataFrame(unique_data, columns=["Plant Code", "Tube Code", "Strain", "Clone #", "Notes"])
+                final_df = combined_df.copy()
+                
+                # Auto-fill missing plant codes
+                for i, row in final_df.iterrows():
+                    if pd.isna(row["Plant Code"]) or str(row["Plant Code"]).strip() == "":
+                        final_df.at[i, "Plant Code"] = extract_plant_code(row["Tube Code"])
+                
                 st.success(f"✅ Using {len(final_df)} entries from collected data")
             
-            # Step 4: Create final z-sheet
+            # Debug: Show sample of final data
+            st.info("📋 Sample of final data before template filling:")
+            st.dataframe(final_df.head(10))
+            
+            # Step 5: Create final z-sheet
             st.info("📖 Creating final z-sheet...")
             
             # Load template buffer
@@ -886,6 +951,8 @@ def excel_combiner():
             
         except Exception as e:
             st.error(f"❌ Error during processing: {str(e)}")
+            import traceback
+            st.error(f"Full error: {traceback.format_exc()}")
 
 def qr_plate_processor():
     """QR Code Plate Processor function."""
