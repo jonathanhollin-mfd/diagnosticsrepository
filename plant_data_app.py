@@ -10,9 +10,23 @@ import base64
 import os
 from typing import List, Tuple, Optional
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-# QR code functionality disabled for cloud compatibility
-QR_AVAILABLE = False
+from PIL import Image
+
+# Try to import QR/CV libraries with fallback
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+try:
+    from pyzbar.pyzbar import decode as pyzbar_decode
+    PYZBAR_AVAILABLE = True
+except ImportError:
+    PYZBAR_AVAILABLE = False
+
+# QR functionality is available only if both libraries are present
+QR_AVAILABLE = CV2_AVAILABLE and PYZBAR_AVAILABLE
 
 # ===================== CONFIGURATION =====================
 st.set_page_config(
@@ -432,8 +446,155 @@ def match_and_process(combined_df, reference_df):
     final_df.drop(columns=["__missing"], inplace=True)
     
 # ===================== QR CODE READER FUNCTIONS =====================
-# QR code functionality has been disabled for cloud compatibility
-# This section has been removed to prevent deployment issues
+def add_white_border(img, pixels=40):
+    """Add white border around image for better QR detection."""
+    return cv2.copyMakeBorder(
+        img, pixels, pixels, pixels, pixels,
+        cv2.BORDER_CONSTANT, value=[255, 255, 255]
+    )
+
+def try_rotations(img, angles=(15, -15, 30, -30)):
+    """Try different rotations to improve QR detection."""
+    if not QR_AVAILABLE:
+        return None
+    
+    for angle in angles:
+        M = cv2.getRotationMatrix2D((img.shape[1] // 2, img.shape[0] // 2), angle, 1.0)
+        rotated = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), borderValue=(255, 255, 255))
+        result = pyzbar_decode(rotated)
+        if result:
+            return result
+    return None
+
+def process_plate_image(uploaded_image, template_buffer, plate_config):
+    """Process a single plate image to extract QR codes."""
+    if not QR_AVAILABLE:
+        return None, None, "QR code libraries not available. Please install opencv-python and pyzbar."
+    
+    try:
+        # Read image
+        image = Image.open(uploaded_image).convert("RGB")
+        img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Configuration
+        COLS = plate_config.get("cols", 8)
+        ROWS = plate_config.get("rows", 12)
+        MARGIN = plate_config.get("margin", 12)
+        CROP_WIDTH = plate_config.get("crop_width", 2180)
+        CROP_HEIGHT = plate_config.get("crop_height", 3940)
+        
+        # Crop image
+        img_h, img_w = img.shape[:2]
+        x = max(0, (img_w - CROP_WIDTH) // 2)
+        y = max(0, (img_h - CROP_HEIGHT) // 2)
+        
+        # Ensure we don't exceed image boundaries
+        x2 = min(x + CROP_WIDTH, img_w)
+        y2 = min(y + CROP_HEIGHT, img_h)
+        cropped_img = img[y:y2, x:x2]
+        
+        # Calculate cell dimensions
+        actual_width = cropped_img.shape[1]
+        actual_height = cropped_img.shape[0]
+        cell_w = actual_width // COLS
+        cell_h = actual_height // ROWS
+        
+        # Load template
+        wb = load_workbook(template_buffer)
+        ws = wb["samples"] if "samples" in wb.sheetnames else wb.active
+        
+        # Generate positions
+        col_labels = list("ABCDEFGH")
+        positions = [f"{col}{row+1}" for row in range(ROWS) for col in col_labels]
+        
+        # Create debug image
+        debug_img = cropped_img.copy()
+        results = []
+        
+        # Process each cell
+        for pos in positions:
+            row = int(pos[1:]) - 1
+            col = 7 - col_labels.index(pos[0])  # A1 top-right
+            
+            x0 = col * cell_w
+            y0 = row * cell_h
+            x1 = max(x0 - MARGIN, 0)
+            y1 = max(y0 - MARGIN, 0)
+            x2 = min(x0 + cell_w + MARGIN, actual_width)
+            y2 = min(y0 + cell_h + MARGIN, actual_height)
+            
+            # Extract cell
+            crop = cropped_img[y1:y2, x1:x2]
+            if crop.size == 0:
+                results.append((pos, ""))
+                continue
+                
+            crop = add_white_border(crop)
+            
+            # Process for QR detection
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            blur = cv2.GaussianBlur(gray, (3, 3), 0)
+            sharp = cv2.addWeighted(gray, 2.0, blur, -1.0, 0)
+            _, thresh = cv2.threshold(sharp, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
+            # Try QR detection
+            qrs = pyzbar_decode(crop) or pyzbar_decode(gray) or pyzbar_decode(thresh)
+            if not qrs:
+                qrs = try_rotations(crop) or try_rotations(gray) or try_rotations(thresh)
+            
+            if qrs:
+                qr_data = qrs[0].data.decode("utf-8").strip()
+                results.append((pos, qr_data))
+                cv2.putText(debug_img, f"{pos}: {qr_data}", (x1 + 3, y1 + 12),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 0), 1)
+            else:
+                results.append((pos, ""))
+                cv2.putText(debug_img, f"{pos}: ---", (x1 + 3, y1 + 12),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+            
+            # Draw grid
+            cv2.rectangle(debug_img, (x1, y1), (x2, y2), (255, 0, 0), 1)
+            cv2.putText(debug_img, pos, (x1 + 5, y1 + 35),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+        
+        # Sort results and populate Excel
+        def well_sort_key(entry):
+            col = ord(entry[0][0]) - ord('A')
+            row = int(entry[0][1:])
+            return (row, col)
+        
+        results_sorted = sorted(results, key=well_sort_key)
+        for idx, (pos, code) in enumerate(results_sorted):
+            ws[f"B{idx + 2}"] = pos
+            ws[f"C{idx + 2}"] = code
+        
+        # Save Excel to buffer
+        excel_buffer = io.BytesIO()
+        wb.save(excel_buffer)
+        excel_buffer.seek(0)
+        
+        # Convert debug image to format for Streamlit
+        debug_img_rgb = cv2.cvtColor(debug_img, cv2.COLOR_BGR2RGB)
+        debug_img_pil = Image.fromarray(debug_img_rgb)
+        
+        # Calculate success metrics
+        total = len(results_sorted)
+        success = sum(1 for _, val in results_sorted if val.strip())
+        failed = total - success
+        failed_positions = [p for p, v in results_sorted if not v.strip()]
+        
+        return {
+            'excel_buffer': excel_buffer,
+            'debug_image': debug_img_pil,
+            'results': results_sorted,
+            'total': total,
+            'success': success,
+            'failed': failed,
+            'failed_positions': failed_positions
+        }, None, None
+        
+    except Exception as e:
+        return None, None, str(e)
 def plant_data_processor():
     """Plant Data Processor function."""
     st.markdown('<div class="nav-header">🌱 Plant Data Processor</div>', unsafe_allow_html=True)
@@ -628,12 +789,39 @@ def qr_plate_processor():
     # Check if QR libraries are available
     if not QR_AVAILABLE:
         st.error("❌ QR Code processing requires additional libraries!")
-        st.markdown("""
-        To use this function, please install the required packages:
+        
+        # Show specific missing libraries
+        missing_libs = []
+        if not CV2_AVAILABLE:
+            missing_libs.append("opencv-python")
+        if not PYZBAR_AVAILABLE:
+            missing_libs.append("pyzbar")
+        
+        st.markdown(f"""
+        **Missing libraries:** {', '.join(missing_libs)}
+        
+        **For local development, install with:**
         ```bash
-        pip install opencv-python pyzbar pillow
+        pip install {' '.join(missing_libs)}
         ```
+        
+        **For Streamlit Cloud deployment:**
+        
+        Add this `packages.txt` file to your repository root:
+        ```
+        libzbar0
+        ```
+        
+        And this `requirements.txt`:
+        ```
+        opencv-python-headless
+        pyzbar
+        ```
+        
+        Note: OpenCV can be challenging in cloud environments. Use `opencv-python-headless` for better compatibility.
         """)
+        
+        st.info("💡 **Alternative**: You can use the other two functions (Plant Data Processor and Excel Combiner) which work without these dependencies.")
         return
     
     # Check if template files exist
