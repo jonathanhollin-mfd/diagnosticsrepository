@@ -813,15 +813,6 @@ def unified_processor():
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # Load reference data if provided
-        reference_df = None
-        if reference_file:
-            try:
-                reference_df = pd.read_excel(reference_file)
-                st.success(f"✅ Loaded reference data with {len(reference_df)} entries")
-            except Exception as e:
-                st.error(f"❌ Error loading reference file: {str(e)}")
-        
         for i, uploaded_file in enumerate(uploaded_files):
             status_text.text(f"Processing {uploaded_file.name}...")
             
