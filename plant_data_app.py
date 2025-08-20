@@ -957,21 +957,6 @@ def qr_plate_processor():
         else:
             st.warning(f"⚠️ {QPCR_TEMPLATE} not found")
     
-    st.markdown("""
-    This tool processes laboratory plate images to extract QR codes and populate Excel templates.
-    
-    **Process:**
-    1. Select template type (LAMP or QPCR)
-    2. Upload plate images to process
-    3. Configure plate settings
-    4. Process images to extract QR codes and generate filled Excel files
-    
-    **💡 Image Quality Tips:**
-    - Use the Image Scale Factor setting (1.5-2.0) for higher resolution processing
-    - Annotated images now display at full resolution for better text readability
-    - Larger font sizes make QR codes and position labels easier to read
-    """)
-    
     # Step 1: Template selection
     st.header("🧪 Step 1: Select Template Type")
     template_options = []
@@ -991,38 +976,35 @@ def qr_plate_processor():
         help=f"Templates are loaded from the repository: {', '.join(template_options)}"
     )
     
-    # Step 2: Plate configuration
-    st.header("⚙️ Step 2: Plate Configuration")
-    col1, col2, col3, col4 = st.columns(4)
+    # Step 2: Image Processing Settings
+    st.header("⚙️ Step 2: Image Processing Settings")
     
-    with col1:
-        cols = st.number_input("Columns", min_value=1, max_value=24, value=8, key="plate_cols")
-    with col2:
-        rows = st.number_input("Rows", min_value=1, max_value=24, value=12, key="plate_rows")
-    with col3:
-        margin = st.number_input("Cell Margin", min_value=0, max_value=50, value=12, key="plate_margin")
-    with col4:
-        pass  # Spacer
-    
-    # Advanced settings
-    with st.expander("🔧 Advanced Settings"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            crop_width = st.number_input("Crop Width", min_value=100, max_value=5000, value=2180, key="crop_width")
-        with col2:
-            crop_height = st.number_input("Crop Height", min_value=100, max_value=5000, value=3940, key="crop_height")
-        with col3:
-            scale_factor = st.number_input("Image Scale Factor", min_value=0.5, max_value=3.0, value=1.0, step=0.1, 
-                                         help="Scale factor for image processing. Higher values (1.5-2.0) may improve QR detection but increase processing time.")
-    
+    # Fixed plate configuration (not user-configurable)
     plate_config = {
-        "cols": cols,
-        "rows": rows,
-        "margin": margin,
-        "crop_width": crop_width,
-        "crop_height": crop_height,
-        "scale_factor": scale_factor
+        "cols": 8,
+        "rows": 12,
+        "margin": 12,
+        "crop_width": 2180,
+        "crop_height": 3940
     }
+    
+    # Image scale factor (user-configurable within reasonable bounds)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        scale_factor = st.slider(
+            "Image Scale Factor", 
+            min_value=0.8, 
+            max_value=2.5, 
+            value=1.0, 
+            step=0.1,
+            key="scale_factor",
+            help="Scale factor for image processing. Higher values (1.5-2.0) may improve QR detection but increase processing time."
+        )
+    
+    plate_config["scale_factor"] = scale_factor
+    
+    if scale_factor != 1.0:
+        st.info(f"🔍 Processing images at {scale_factor}x scale for enhanced QR detection")
     
     # Step 3: Upload images
     st.header("📷 Step 3: Upload Plate Images")
