@@ -49,7 +49,7 @@ st.markdown("""
 <style>
 /* Navigation styling */
 .nav-header {
-    background: #000000;
+    background: rgba(0, 0, 0, 0.7);
     padding: 1.5rem;
     margin-bottom: 2rem;
     color: #ffffff;
@@ -1192,26 +1192,25 @@ def main():
     
     # Function descriptions in sidebar
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📖 Function Descriptions")
-    
-    if "Unified Plant Data Processor" in app_mode:
-        st.sidebar.markdown("""
-        **🔄 Unified Plant Data Processor**
-        - Combines Plant Data Processor and Headwaters Submission
-        - Smart detection of special client formats
-        - Fuzzy column mapping for various naming conventions
-        - Multi-sheet processing when appropriate
-        - Optional reference file matching
-        - High-performance vectorized operations
-        """)
-    else:
-        st.sidebar.markdown("""
-        **🔍 QR Code Plate Processor**
-        - Process laboratory plate images
-        - Extract QR codes automatically
-        - Generate filled Excel templates
-        - Support for LAMP and QPCR formats
-        """)
+    with st.sidebar.expander("📖 Function Descriptions", expanded=False):
+        if "Unified Plant Data Processor" in app_mode:
+            st.markdown("""
+            **🔄 Unified Plant Data Processor**
+            - Combines Plant Data Processor and Headwaters Submission
+            - Smart detection of special client formats
+            - Fuzzy column mapping for various naming conventions
+            - Multi-sheet processing when appropriate
+            - Optional reference file matching
+            - High-performance vectorized operations
+            """)
+        else:
+            st.markdown("""
+            **🔍 QR Code Plate Processor**
+            - Process laboratory plate images
+            - Extract QR codes automatically
+            - Generate filled Excel templates
+            - Support for LAMP and QPCR formats
+            """)
     
     # Route to appropriate function
     if "Unified Plant Data Processor" in app_mode:
