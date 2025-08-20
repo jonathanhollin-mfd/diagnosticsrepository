@@ -753,17 +753,6 @@ def unified_processor():
     """Unified processor function that handles both plant data and headwaters processing."""
     st.markdown('<div class="nav-header">🔄 Unified Plant Data Processor</div>', unsafe_allow_html=True)
     
-    st.markdown("""
-    **All-in-One Processing Solution:**
-    - 🌱 **Standard Plant Data**: Process individual files with exact column headers
-    - 🔍 **Smart Detection**: Automatically detects and handles special client formats
-    - 🌊 **Multi-Sheet Processing**: Combines data from all sheets when appropriate
-    - 📋 **Reference Matching**: Optional reference file matching for data validation
-    - ⚡ **High Performance**: Optimized processing with intelligent format detection
-    
-    This unified tool replaces both the Plant Data Processor and Headwaters Submission functions with enhanced capabilities.
-    """)
-    
     # Check if template file exists in repository
     if not check_template_exists(TEMPLATE_FILE):
         st.error(f"❌ Template file '{TEMPLATE_FILE}' not found in repository!")
@@ -772,15 +761,8 @@ def unified_processor():
     
     st.success(f"✅ Template file '{TEMPLATE_FILE}' found in repository!")
     
-    # Data files upload
+    # Data files upload - simplified and prominent
     st.header("📊 Upload Data Files")
-    st.info("""
-    **Processing Logic:**
-    - Files with "Clone Number" in column D will have **all sheets processed and combined**
-    - Other Excel files will process only the **active sheet**
-    - CSV files will be processed as **standard format**
-    - Fuzzy column matching works for various naming conventions
-    """)
     
     uploaded_files = st.file_uploader(
         "Upload your data files (CSV or Excel)",
@@ -788,6 +770,24 @@ def unified_processor():
         accept_multiple_files=True,
         key="unified_data_files"
     )
+    
+    # Info section moved to expander
+    with st.expander("ℹ️ About This Tool", expanded=False):
+        st.markdown("""
+        **All-in-One Processing Solution:**
+        - 🌱 **Standard Plant Data**: Process individual files with exact column headers
+        - 🔍 **Smart Detection**: Automatically detects and handles special client formats
+        - 🌊 **Multi-Sheet Processing**: Combines data from all sheets when appropriate
+        - ⚡ **High Performance**: Optimized processing with intelligent format detection
+        
+        This unified tool replaces both the Plant Data Processor and Headwaters Submission functions with enhanced capabilities.
+        
+        **Processing Logic:**
+        - Files with "Clone Number" in column D will have **all sheets processed and combined**
+        - Other Excel files will process only the **active sheet**
+        - CSV files will be processed as **standard format**
+        - Fuzzy column matching works for various naming conventions
+        """)
     
     if not uploaded_files:
         st.info("Please upload one or more data files to process.")
