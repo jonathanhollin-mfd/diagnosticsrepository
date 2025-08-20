@@ -1291,8 +1291,109 @@ def qr_plate_processor_with_sharing():
     if existing_files:
         st.header("📁 Shared Images")
         
+        # Batch processing controls
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            st.subheader("Batch Operations")
+        with col2:
+            batch_process = st.button("🔄 Batch Process All", key="batch_process_all")
+        with col3:
+            batch_download = st.button("📦 Batch Download All", key="batch_download_all")
+        
+        # Initialize session state for batch results
+        if 'batch_results' not in st.session_state:
+            st.session_state.batch_results = {}
+        
+        # Batch processing
+        if batch_process:
+            st.subheader("🔄 Batch Processing Progress")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # Load template once for batch processing
+            template_file = LAMP_TEMPLATE if selected_template == "LAMP" else QPCR_TEMPLATE
+            template_buffer = load_template_from_file(template_file)
+            
+            if not template_buffer:
+                st.error("❌ Failed to load template file")
+                return
+            
+            # Process each file
+            for i, file_info in enumerate(existing_files):
+                status_text.text(f"Processing {file_info['name']}... ({i+1}/{len(existing_files)})")
+                
+                try:
+                    with open(file_info['path'], 'rb') as f:
+                        image_data = f.read()
+                    
+                    # Create file-like object
+                    image_file = io.BytesIO(image_data)
+                    image_file.name = file_info['name']
+                    
+                    # Process with existing logic
+                    plate_config = {
+                        "cols": 8, "rows": 12, "margin": 12,
+                        "crop_width": 2180, "crop_height": 3940
+                    }
+                    
+                    result, _, error = process_plate_image(image_file, template_buffer, plate_config)
+                    
+                    if error:
+                        st.session_state.batch_results[file_info['name']] = {
+                            'error': error,
+                            'success': False
+                        }
+                    elif result:
+                        st.session_state.batch_results[file_info['name']] = {
+                            'result': result,
+                            'success': True
+                        }
+                    
+                except Exception as e:
+                    st.session_state.batch_results[file_info['name']] = {
+                        'error': str(e),
+                        'success': False
+                    }
+                
+                progress_bar.progress((i + 1) / len(existing_files))
+            
+            status_text.text("Batch processing complete!")
+            st.success(f"✅ Processed {len(existing_files)} files")
+        
+        # Batch download
+        if batch_download and st.session_state.batch_results:
+            st.subheader("📦 Batch Download")
+            
+            # Create ZIP file with all processed results
+            import zipfile
+            zip_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for filename, result_data in st.session_state.batch_results.items():
+                    if result_data.get('success') and 'result' in result_data:
+                        base_name = filename.rsplit('.', 1)[0]
+                        excel_filename = f"{base_name}_{selected_template}_filled.xlsx"
+                        zip_file.writestr(excel_filename, result_data['result']['excel_buffer'].getvalue())
+            
+            zip_buffer.seek(0)
+            
+            # Count successful results
+            successful_count = sum(1 for r in st.session_state.batch_results.values() if r.get('success'))
+            
+            st.download_button(
+                label=f"📦 Download {successful_count} Processed Files (ZIP)",
+                data=zip_buffer.getvalue(),
+                file_name=f"Batch_QR_Results_{selected_template}.zip",
+                mime="application/zip",
+                key="batch_download_zip"
+            )
+        
+        # Display individual files with results
         for file_info in existing_files:
-            col1, col2, col3 = st.columns([3, 1, 1])
+            st.markdown("---")
+            
+            # File info row
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
             
             with col1:
                 st.text(f"📷 {file_info['name']}")
@@ -1300,8 +1401,17 @@ def qr_plate_processor_with_sharing():
                 size_mb = file_info['size'] / (1024 * 1024)
                 st.text(f"{size_mb:.1f} MB")
             with col3:
+                # Check if already processed
+                if file_info['name'] in st.session_state.batch_results:
+                    if st.session_state.batch_results[file_info['name']].get('success'):
+                        st.success("✅ Processed")
+                    else:
+                        st.error("❌ Failed")
+                else:
+                    st.text("⏳ Not processed")
+            with col4:
                 if st.button("🔄 Process", key=f"process_shared_{file_info['name']}"):
-                    # Load file and process it
+                    # Individual processing
                     try:
                         with open(file_info['path'], 'rb') as f:
                             image_data = f.read()
@@ -1325,10 +1435,21 @@ def qr_plate_processor_with_sharing():
                             
                             if error:
                                 st.error(f"❌ Error: {error}")
+                                st.session_state.batch_results[file_info['name']] = {
+                                    'error': error,
+                                    'success': False
+                                }
                             elif result:
                                 st.success(f"✅ Processed {file_info['name']}")
+                                st.session_state.batch_results[file_info['name']] = {
+                                    'result': result,
+                                    'success': True
+                                }
                                 
-                                # Show results
+                                # Show results in full width
+                                st.subheader(f"📊 Results for {file_info['name']}")
+                                
+                                # Metrics in a row
                                 col1, col2, col3 = st.columns(3)
                                 with col1:
                                     st.metric("Total Wells", result['total'])
@@ -1349,12 +1470,54 @@ def qr_plate_processor_with_sharing():
                                     key=f"download_{file_info['name']}"
                                 )
                                 
-                                # Show debug image
+                                # Show debug image in full width
                                 with st.expander("🔍 View Detection Results"):
                                     st.image(result['debug_image'], caption="QR Detection Results")
                         
                     except Exception as e:
                         st.error(f"Error processing file: {e}")
+                        st.session_state.batch_results[file_info['name']] = {
+                            'error': str(e),
+                            'success': False
+                        }
+            
+            # Show results if already processed
+            if file_info['name'] in st.session_state.batch_results:
+                result_data = st.session_state.batch_results[file_info['name']]
+                
+                if result_data.get('success') and 'result' in result_data:
+                    result = result_data['result']
+                    
+                    # Show results in full width
+                    st.subheader(f"📊 Results for {file_info['name']}")
+                    
+                    # Metrics in a row
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Wells", result['total'])
+                    with col2:
+                        st.metric("Successful", result['success'])
+                    with col3:
+                        st.metric("Failed", result['failed'])
+                    
+                    # Download button
+                    base_name = file_info['name'].rsplit('.', 1)[0]
+                    excel_filename = f"{base_name}_{selected_template}_filled.xlsx"
+                    
+                    st.download_button(
+                        label="📥 Download Excel",
+                        data=result['excel_buffer'].getvalue(),
+                        file_name=excel_filename,
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        key=f"download_results_{file_info['name']}"
+                    )
+                    
+                    # Show debug image in full width
+                    with st.expander("🔍 View Detection Results"):
+                        st.image(result['debug_image'], caption="QR Detection Results")
+                
+                elif not result_data.get('success'):
+                    st.error(f"❌ Processing failed: {result_data.get('error', 'Unknown error')}")
     
     # === UPLOAD SECTION ===
     st.header("📷 Upload Images")
