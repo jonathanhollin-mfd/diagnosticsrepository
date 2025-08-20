@@ -1371,6 +1371,7 @@ def qr_plate_processor_with_sharing():
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                 for filename, result_data in st.session_state.batch_results.items():
                     if result_data.get('success') and 'result' in result_data:
+                        # Remove any file extension and create Excel filename
                         base_name = filename.rsplit('.', 1)[0]
                         excel_filename = f"{base_name}-{selected_template}.xlsx"
                         zip_file.writestr(excel_filename, result_data['result']['excel_buffer'].getvalue())
@@ -1384,7 +1385,7 @@ def qr_plate_processor_with_sharing():
                 st.download_button(
                     label=f"📦 Download Processed {successful_count} Sheets",
                     data=zip_buffer.getvalue(),
-                    file_name=f"Batch_QR_Results_{selected_template}.zip",
+                    file_name=f"{datetime.now().strftime('%Y-%m-%d')}_QR_Processor_Output_{successful_count}-Sheets.zip",
                     mime="application/zip",
                     key="batch_download_zip"
                 )
