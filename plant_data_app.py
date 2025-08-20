@@ -789,16 +789,6 @@ def unified_processor():
         key="unified_data_files"
     )
     
-    # Optional reference file
-    st.header("📋 Reference File (Optional)")
-    reference_file = st.file_uploader(
-        "Upload Reference Excel File (Optional)",
-        type=['xlsx'],
-        accept_multiple_files=False,
-        key="unified_reference_file",
-        help="Upload a reference file to match against and auto-fill missing data. This is optional."
-    )
-    
     if not uploaded_files:
         st.info("Please upload one or more data files to process.")
         return
@@ -829,16 +819,6 @@ def unified_processor():
             if error:
                 st.error(f"❌ Error processing {uploaded_file.name}: {error}")
             else:
-                # If reference data is available, attempt matching
-                if reference_df is not None:
-                    try:
-                        # Simple matching logic - you can enhance this
-                        st.info(f"🔗 Matching {uploaded_file.name} with reference data...")
-                        # This is a placeholder for more sophisticated matching logic
-                        # You could implement the same logic from the original headwaters function
-                    except Exception as e:
-                        st.warning(f"⚠️ Could not match with reference data: {str(e)}")
-                
                 results.append({
                     'original_name': uploaded_file.name,
                     'output_name': output_filename,
@@ -858,16 +838,11 @@ def unified_processor():
             total_files = len(results)
             total_rows = sum(len(result['data']) for result in results)
             
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 st.metric("Files Processed", total_files)
             with col2:
                 st.metric("Total Rows Processed", total_rows)
-            with col3:
-                if reference_file:
-                    st.metric("Reference Entries", len(reference_df))
-                else:
-                    st.metric("Reference File", "None")
             
             # Show sample of processed data
             st.subheader("📋 Sample of Processed Data")
