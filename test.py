@@ -11,6 +11,11 @@ import os
 from typing import List, Tuple, Optional
 import numpy as np
 from PIL import Image
+import tempfile
+import shutil
+import secrets
+import time
+from pathlib import Path
 
 # Add HEIC/HEIF support
 try:
@@ -450,6 +455,64 @@ def process_single_file(uploaded_file, filename, template_buffer):
         return df_clean, output_buffer, output_filename, None
     except Exception as e:
         return None, None, None, str(e)
+
+# ===================== DEVICE SHARING FUNCTIONS =====================
+TEMP_DIR = Path(tempfile.gettempdir()) / "riaz_machine_sessions"
+TEMP_DIR.mkdir(exist_ok=True)
+
+def generate_session_id():
+    """Generate a random 6-character session code."""
+    return secrets.token_urlsafe(6)
+
+def get_session_dir(session_id):
+    """Get or create session directory."""
+    session_dir = TEMP_DIR / session_id
+    session_dir.mkdir(exist_ok=True)
+    return session_dir
+
+def save_uploaded_image(session_id, uploaded_file, custom_name):
+    """Save uploaded image to session directory."""
+    session_dir = get_session_dir(session_id)
+    
+    # Get file extension
+    file_ext = uploaded_file.name.split('.')[-1]
+    filename = f"{custom_name}.{file_ext}"
+    filepath = session_dir / filename
+    
+    # Save file
+    with open(filepath, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    
+    return filepath
+
+def list_session_files(session_id):
+    """List all files in session directory."""
+    session_dir = get_session_dir(session_id)
+    if not session_dir.exists():
+        return []
+    
+    files = []
+    for file_path in session_dir.glob("*"):
+        if file_path.is_file():
+            files.append({
+                'name': file_path.name,
+                'path': file_path,
+                'size': file_path.stat().st_size,
+                'modified': file_path.stat().st_mtime
+            })
+    
+    return sorted(files, key=lambda x: x['modified'], reverse=True)
+
+def cleanup_old_sessions(max_age_hours=24):
+    """Clean up sessions older than max_age_hours."""
+    current_time = time.time()
+    max_age_seconds = max_age_hours * 3600
+    
+    for session_dir in TEMP_DIR.iterdir():
+        if session_dir.is_dir():
+            dir_age = current_time - session_dir.stat().st_mtime
+            if dir_age > max_age_seconds:
+                shutil.rmtree(session_dir, ignore_errors=True)
 
 # ===================== QR CODE READER FUNCTIONS =====================
 def add_white_border(img, pixels=40):
@@ -1156,6 +1219,204 @@ def qr_plate_processor():
                 
                 st.markdown("---")
 
+def qr_plate_processor_with_sharing():
+    """QR Code Plate Processor with device sharing capability."""
+    
+    # Clean up old sessions
+    cleanup_old_sessions()
+    
+    st.markdown('<div class="nav-header">🔍 QR Code Plate Processor (Device Sharing)</div>', unsafe_allow_html=True)
+    
+    # Check if QR libraries are available
+    if not QR_AVAILABLE:
+        st.error("❌ QR Code processing requires additional libraries!")
+        st.info("Install: opencv-python and pyzbar")
+        return
+    
+    # Check templates
+    lamp_exists = check_template_exists(LAMP_TEMPLATE)
+    qpcr_exists = check_template_exists(QPCR_TEMPLATE)
+    
+    if not lamp_exists and not qpcr_exists:
+        st.error(f"❌ Template files not found!")
+        return
+    
+    # === DEVICE SHARING SECTION ===
+    st.header("🔗 Device Sharing")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📱 From Phone")
+        if st.button("🆕 Create Share Code", key="create_share"):
+            share_code = generate_session_id()
+            st.session_state.share_code = share_code
+            st.success(f"**Share Code:** {share_code}")
+            st.info("Use this code on your computer to access uploaded images.")
+    
+    with col2:
+        st.subheader("💻 From Computer")
+        share_input = st.text_input("Enter Share Code:", key="share_input")
+        if st.button("🔗 Access Images", key="access_share"):
+            if share_input.strip():
+                st.session_state.share_code = share_input.strip()
+                st.success(f"✅ Accessing: **{share_input.strip()}**")
+            else:
+                st.error("Please enter a valid share code")
+    
+    # Check for active session
+    current_code = getattr(st.session_state, 'share_code', None)
+    if not current_code:
+        st.info("👆 Create a share code or enter an existing one to begin.")
+        return
+    
+    st.info(f"🔗 **Active Share Code:** {current_code}")
+    
+    # === TEMPLATE SELECTION ===
+    st.header("🧪 Template Selection")
+    template_options = []
+    if lamp_exists:
+        template_options.append("LAMP")
+    if qpcr_exists:
+        template_options.append("QPCR")
+    
+    selected_template = st.radio(
+        "Choose template:",
+        template_options,
+        key="template_sharing"
+    )
+    
+    # === SHOW EXISTING FILES ===
+    existing_files = list_session_files(current_code)
+    if existing_files:
+        st.header("📁 Shared Images")
+        
+        for file_info in existing_files:
+            col1, col2, col3 = st.columns([3, 1, 1])
+            
+            with col1:
+                st.text(f"📷 {file_info['name']}")
+            with col2:
+                size_mb = file_info['size'] / (1024 * 1024)
+                st.text(f"{size_mb:.1f} MB")
+            with col3:
+                if st.button("🔄 Process", key=f"process_shared_{file_info['name']}"):
+                    # Load file and process it
+                    try:
+                        with open(file_info['path'], 'rb') as f:
+                            image_data = f.read()
+                        
+                        # Create file-like object
+                        image_file = io.BytesIO(image_data)
+                        image_file.name = file_info['name']
+                        
+                        # Load template
+                        template_file = LAMP_TEMPLATE if selected_template == "LAMP" else QPCR_TEMPLATE
+                        template_buffer = load_template_from_file(template_file)
+                        
+                        if template_buffer:
+                            # Process with existing logic
+                            plate_config = {
+                                "cols": 8, "rows": 12, "margin": 12,
+                                "crop_width": 2180, "crop_height": 3940
+                            }
+                            
+                            result, _, error = process_plate_image(image_file, template_buffer, plate_config)
+                            
+                            if error:
+                                st.error(f"❌ Error: {error}")
+                            elif result:
+                                st.success(f"✅ Processed {file_info['name']}")
+                                
+                                # Show results
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Total Wells", result['total'])
+                                with col2:
+                                    st.metric("Successful", result['success'])
+                                with col3:
+                                    st.metric("Failed", result['failed'])
+                                
+                                # Download button
+                                base_name = file_info['name'].rsplit('.', 1)[0]
+                                excel_filename = f"{base_name}_{selected_template}_filled.xlsx"
+                                
+                                st.download_button(
+                                    label="📥 Download Excel",
+                                    data=result['excel_buffer'].getvalue(),
+                                    file_name=excel_filename,
+                                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                    key=f"download_{file_info['name']}"
+                                )
+                                
+                                # Show debug image
+                                with st.expander("🔍 View Detection Results"):
+                                    st.image(result['debug_image'], caption="QR Detection Results")
+                        
+                    except Exception as e:
+                        st.error(f"Error processing file: {e}")
+    
+    # === UPLOAD SECTION ===
+    st.header("📷 Upload Images")
+    
+    uploaded_images = st.file_uploader(
+        "Upload plate images",
+        type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
+        accept_multiple_files=True,
+        key="shared_images"
+    )
+    
+    if uploaded_images:
+        st.subheader("✏️ Rename and Save")
+        
+        for i, uploaded_image in enumerate(uploaded_images):
+            col1, col2, col3 = st.columns([2, 2, 1])
+            
+            with col1:
+                st.text(f"📷 {uploaded_image.name}")
+            
+            with col2:
+                custom_name = st.text_input(
+                    "Custom name:",
+                    value=uploaded_image.name.rsplit('.', 1)[0],
+                    key=f"rename_shared_{i}"
+                )
+            
+            with col3:
+                if st.button("💾 Save", key=f"save_shared_{i}"):
+                    if custom_name.strip():
+                        try:
+                            filepath = save_uploaded_image(current_code, uploaded_image, custom_name.strip())
+                            st.success(f"✅ Saved: {custom_name}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving: {e}")
+                    else:
+                        st.error("Please enter a custom name")
+    
+    # === INSTRUCTIONS ===
+    with st.expander("📱 How to Use Device Sharing"):
+        st.markdown("""
+        **Step-by-step:**
+        
+        1. **On your phone:**
+           - Click "🆕 Create Share Code"
+           - Note the share code (e.g., "ABC123")
+           - Upload images and rename them
+           - Click "💾 Save" for each image
+        
+        2. **On your computer:**
+           - Enter the share code
+           - Click "🔗 Access Images"
+           - Select template type (LAMP/QPCR)
+           - Click "🔄 Process" on any image
+        
+        **Notes:**
+        - Share codes expire after 24 hours
+        - Images are temporarily stored on the server
+        - Both devices must access the same Streamlit app URL
+        """)
+
 def main():
     """Main application function."""
     # Sidebar navigation
@@ -1167,7 +1428,8 @@ def main():
         "Choose Function:",
         [
             "🔄 Unified Plant Data Processor", 
-            "🔍 QR Code Plate Processor"
+            "🔍 QR Code Plate Processor",
+            "📱 QR Processor (Device Sharing)"
         ],
         key="main_nav"
     )
@@ -1198,8 +1460,10 @@ def main():
     # Route to appropriate function
     if "Unified Plant Data Processor" in app_mode:
         unified_processor()
-    elif "QR Code Plate Processor" in app_mode:
+    elif "QR Code Plate Processor" in app_mode and "Device Sharing" not in app_mode:
         qr_plate_processor()
+    elif "Device Sharing" in app_mode:
+        qr_plate_processor_with_sharing()
 
 if __name__ == "__main__":
     main()
