@@ -49,14 +49,15 @@ st.markdown("""
 <style>
 /* Navigation styling */
 .nav-header {
-    background: linear-gradient(90deg, #4CAF50, #45a049);
+    background: linear-gradient(90deg, #f8f9fa, #e9ecef);
     padding: 1rem;
     border-radius: 10px;
     margin-bottom: 2rem;
-    color: white;
+    color: #495057;
     text-align: center;
     font-size: 24px;
     font-weight: bold;
+    border: 1px solid #dee2e6;
 }
 
 /* Section separators */
@@ -751,7 +752,7 @@ def plant_data_processor():
 
 def unified_processor():
     """Unified processor function that handles both plant data and headwaters processing."""
-    st.markdown('<div class="nav-header">🔄 Unified Plant Data Processor</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-header">Automated Data Processing and Submission Tool</div>', unsafe_allow_html=True)
     
     # Check if template file exists in repository
     if not check_template_exists(TEMPLATE_FILE):
@@ -1212,18 +1213,6 @@ def main():
         - Generate filled Excel templates
         - Support for LAMP and QPCR formats
         """)
-    
-    # Show what's new
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🆕 What's New")
-    st.sidebar.success("""
-    **Enhanced Features:**
-    - ⚡ Faster processing
-    - 🧠 Smart format detection
-    - 🔍 Fuzzy column mapping
-    - 📅 Advanced date parsing
-    - 🔄 Unified processing
-    """)
     
     # Route to appropriate function
     if "Unified Plant Data Processor" in app_mode:
