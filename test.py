@@ -1594,7 +1594,6 @@ def main():
         "Choose Function:",
         [
             "🔄 Unified Plant Data Processor", 
-            "🔍 QR Code Plate Processor",
             "📱 QR Processor (Device Sharing)"
         ],
         key="main_nav"
@@ -1614,20 +1613,20 @@ def main():
             - High-performance vectorized operations
             """)
         
-        with st.expander("🔍 QR Code Plate Processor", expanded=False):
+        with st.expander("📱 QR Processor (Device Sharing)", expanded=False):
             st.markdown("""
-            **🔍 QR Code Plate Processor**
-            - Process laboratory plate images
+            **📱 QR Processor (Device Sharing)**
+            - Process laboratory plate images with cross-device sharing
+            - Upload images on phone, process on computer
             - Extract QR codes automatically
             - Generate filled Excel templates
             - Support for LAMP and QPCR formats
+            - Batch processing and download capabilities
             """)
     
     # Route to appropriate function
     if "Unified Plant Data Processor" in app_mode:
         unified_processor()
-    elif "QR Code Plate Processor" in app_mode and "Device Sharing" not in app_mode:
-        qr_plate_processor()
     elif "Device Sharing" in app_mode:
         qr_plate_processor_with_sharing()
 
