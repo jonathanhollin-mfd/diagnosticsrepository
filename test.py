@@ -1372,7 +1372,7 @@ def qr_plate_processor_with_sharing():
                 for filename, result_data in st.session_state.batch_results.items():
                     if result_data.get('success') and 'result' in result_data:
                         base_name = filename.rsplit('.', 1)[0]
-                        excel_filename = f"{base_name}_{selected_template}_filled.xlsx"
+                        excel_filename = f"{base_name}-{selected_template}.xlsx"
                         zip_file.writestr(excel_filename, result_data['result']['excel_buffer'].getvalue())
             
             zip_buffer.seek(0)
@@ -1462,7 +1462,7 @@ def qr_plate_processor_with_sharing():
                                 
                                 # Download button
                                 base_name = file_info['name'].rsplit('.', 1)[0]
-                                excel_filename = f"{base_name}_{selected_template}_filled.xlsx"
+                                excel_filename = f"{base_name}-{selected_template}.xlsx"
                                 
                                 st.download_button(
                                     label="📥 Download Excel",
@@ -1504,7 +1504,7 @@ def qr_plate_processor_with_sharing():
                     
                     # Download button
                     base_name = file_info['name'].rsplit('.', 1)[0]
-                    excel_filename = f"{base_name}_{selected_template}_filled.xlsx"
+                    excel_filename = f"{base_name}-{selected_template}.xlsx"
                     
                     st.download_button(
                         label="📥 Download Excel",
