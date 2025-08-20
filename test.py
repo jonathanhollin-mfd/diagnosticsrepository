@@ -11,6 +11,10 @@ import os
 from typing import List, Tuple, Optional
 import numpy as np
 from PIL import Image
+import json
+import time
+import hashlib
+import tempfile
 
 # Add HEIC/HEIF support
 try:
@@ -124,7 +128,7 @@ st.markdown("""
     box-shadow: 0 6px 12px rgba(33,150,243,0.4) !important;
 }
 
-# QR Reader button styling
+/* QR Reader button styling */
 .qr-button .stButton > button {
     background-color: #9C27B0 !important;
     color: white !important;
@@ -136,6 +140,20 @@ st.markdown("""
     background-color: #7B1FA2 !important;
     box-shadow: 0 6px 12px rgba(156,39,176,0.4) !important;
 }
+
+/* Share button styling */
+.share-button .stButton > button {
+    background-color: #FF9800 !important;
+    color: white !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 4px 8px rgba(255,152,0,0.3) !important;
+}
+
+.share-button .stButton > button:hover {
+    background-color: #F57C00 !important;
+    box-shadow: 0 6px 12px rgba(255,152,0,0.4) !important;
+}
+
 .stDownloadButton > button {
     width: 100% !important;
     height: 50px !important;
@@ -168,6 +186,19 @@ st.markdown("""
     border-color: #4CAF50;
     background-color: #f0f8f0;
 }
+
+/* Share code styling */
+.share-code {
+    background-color: #f0f0f0;
+    border: 2px solid #4CAF50;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    color: #2E7D32;
+    margin: 20px 0;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -175,6 +206,101 @@ st.markdown("""
 TEMPLATE_FILE = "z-sheet.xlsx"
 LAMP_TEMPLATE = "LAMP-X.xlsx"
 QPCR_TEMPLATE = "QPCR-X.xlsx"
+
+# File sharing system
+TEMP_DIR = tempfile.gettempdir()
+SHARED_FILES_DIR = os.path.join(TEMP_DIR, "riaz_machine_shared")
+
+def init_shared_files_system():
+    """Initialize the shared files directory."""
+    if not os.path.exists(SHARED_FILES_DIR):
+        os.makedirs(SHARED_FILES_DIR)
+
+def generate_share_code():
+    """Generate a unique 6-digit share code."""
+    timestamp = str(int(time.time()))
+    random_str = str(hash(timestamp + str(np.random.random())))
+    return hashlib.md5(random_str.encode()).hexdigest()[:6].upper()
+
+def save_shared_files(files, metadata=None):
+    """Save files with a unique share code and return the code."""
+    init_shared_files_system()
+    share_code = generate_share_code()
+    share_dir = os.path.join(SHARED_FILES_DIR, share_code)
+    os.makedirs(share_dir, exist_ok=True)
+    
+    # Save metadata
+    if metadata is None:
+        metadata = {"upload_time": time.time(), "file_count": len(files)}
+    
+    # Save files
+    saved_files = []
+    for file in files:
+        file_path = os.path.join(share_dir, file.name)
+        with open(file_path, "wb") as f:
+            f.write(file.getvalue())
+        saved_files.append({
+            "name": file.name,
+            "size": len(file.getvalue()),
+            "path": file_path
+        })
+    
+    # Save metadata
+    metadata["files"] = saved_files
+    metadata_path = os.path.join(share_dir, "metadata.json")
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f)
+    
+    return share_code
+
+def load_shared_files(share_code):
+    """Load files using a share code."""
+    init_shared_files_system()
+    share_dir = os.path.join(SHARED_FILES_DIR, share_code.upper())
+    metadata_path = os.path.join(share_dir, "metadata.json")
+    
+    if not os.path.exists(metadata_path):
+        return None
+    
+    try:
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+        
+        files = []
+        for file_info in metadata.get("files", []):
+            if os.path.exists(file_info["path"]):
+                with open(file_info["path"], "rb") as f:
+                    file_content = io.BytesIO(f.read())
+                    file_content.name = file_info["name"]
+                    files.append(file_content)
+        
+        return {"files": files, "metadata": metadata}
+    except Exception as e:
+        st.error(f"Error loading shared files: {str(e)}")
+        return None
+
+def cleanup_old_shares(max_age_hours=24):
+    """Clean up shared files older than max_age_hours."""
+    init_shared_files_system()
+    current_time = time.time()
+    
+    for share_code in os.listdir(SHARED_FILES_DIR):
+        share_dir = os.path.join(SHARED_FILES_DIR, share_code)
+        metadata_path = os.path.join(share_dir, "metadata.json")
+        
+        if os.path.exists(metadata_path):
+            try:
+                with open(metadata_path, "r") as f:
+                    metadata = json.load(f)
+                
+                upload_time = metadata.get("upload_time", 0)
+                age_hours = (current_time - upload_time) / 3600
+                
+                if age_hours > max_age_hours:
+                    import shutil
+                    shutil.rmtree(share_dir)
+            except Exception:
+                pass
 
 def check_template_exists(template_file):
     """Check if a template file exists in the repository."""
@@ -452,26 +578,6 @@ def process_single_file(uploaded_file, filename, template_buffer):
         return None, None, None, str(e)
 
 # ===================== QR CODE READER FUNCTIONS =====================
-def add_white_border(img, pixels=40):
-    """Add white border around image for better QR detection."""
-    return cv2.copyMakeBorder(
-        img, pixels, pixels, pixels, pixels,
-        cv2.BORDER_CONSTANT, value=[255, 255, 255]
-    )
-
-def try_rotations(img, angles=(15, -15, 30, -30)):
-    """Try different rotations to improve QR detection."""
-    if not QR_AVAILABLE:
-        return None
-    
-    for angle in angles:
-        M = cv2.getRotationMatrix2D((img.shape[1] // 2, img.shape[0] // 2), angle, 1.0)
-        rotated = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), borderValue=(255, 255, 255))
-        result = pyzbar_decode(rotated)
-        if result:
-            return result
-    return None
-
 def detect_image_orientation(img):
     """Detect if image should be rotated for portrait processing."""
     height, width = img.shape[:2]
@@ -503,8 +609,28 @@ def generate_safe_filename(original_name, existing_names=None):
     
     return final_name
 
+def add_white_border(img, pixels=40):
+    """Add white border around image for better QR detection."""
+    return cv2.copyMakeBorder(
+        img, pixels, pixels, pixels, pixels,
+        cv2.BORDER_CONSTANT, value=[255, 255, 255]
+    )
+
+def try_rotations(img, angles=(15, -15, 30, -30)):
+    """Try different rotations to improve QR detection."""
+    if not QR_AVAILABLE:
+        return None
+    
+    for angle in angles:
+        M = cv2.getRotationMatrix2D((img.shape[1] // 2, img.shape[0] // 2), angle, 1.0)
+        rotated = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), borderValue=(255, 255, 255))
+        result = pyzbar_decode(rotated)
+        if result:
+            return result
+    return None
+
 def process_plate_image(uploaded_image, template_buffer, plate_config, scale_factor=1.0):
-    """Process a single plate image to extract QR codes."""
+    """Process a single plate image to extract QR codes with proper orientation handling."""
     if not QR_AVAILABLE:
         return None, None, "QR code libraries not available. Please install opencv-python and pyzbar."
     
@@ -642,150 +768,201 @@ def process_plate_image(uploaded_image, template_buffer, plate_config, scale_fac
     except Exception as e:
         return None, None, str(e)
 
-def plant_data_processor():
-    """Enhanced Plant Data Processor function with new optimized logic."""
-    st.markdown('<div class="nav-header">🌱 Plant Data Processor</div>', unsafe_allow_html=True)
+# ===================== MOBILE FILE SHARING FUNCTION =====================
+def mobile_file_sharing():
+    """Mobile-friendly file sharing interface."""
+    st.markdown('<div class="nav-header">📱 Mobile File Sharing</div>', unsafe_allow_html=True)
     
     st.markdown("""
-    **Enhanced Processing Features:**
-    - 🔍 **Smart Detection**: Automatically detects special client formats (e.g., "Clone Number" in column D)
-    - 🧠 **Fuzzy Column Mapping**: Intelligent column recognition for various naming conventions
-    - 📅 **Advanced Date Parsing**: Converts date formats to YYYY-MM-DD automatically
-    - ⚡ **Optimized Performance**: Faster processing with vectorized operations
-    - 🔄 **Multi-Sheet Support**: Processes all sheets for special client formats
+    **📱 Upload from Mobile → 💻 Access from Computer**
+    
+    Perfect for the workflow: Take pictures on your phone, upload here, then access from your computer to rename and process.
     """)
     
-    # Check if template file exists in repository
-    if not check_template_exists(TEMPLATE_FILE):
-        st.error(f"❌ Template file '{TEMPLATE_FILE}' not found in repository!")
-        st.info(f"Please ensure '{TEMPLATE_FILE}' is in the same directory as this application.")
-        return
+    # Cleanup old files periodically
+    cleanup_old_shares(24)
     
-    st.success(f"✅ Template file '{TEMPLATE_FILE}' found in repository!")
+    # Two tabs: Upload and Access
+    tab1, tab2 = st.tabs(["📤 Upload Files", "📥 Access Files"])
     
-    # Data files upload
-    st.header("📊 Upload Raw Client Sheet(s)")
-    st.info("""
-    **Supported formats:**
-    - **CSV files** with standard column headers
-    - **Excel files** with single or multiple sheets
-    - **Special client Excel files** (automatically detected if column D contains "Clone Number")
-    """)
-    
-    uploaded_files = st.file_uploader(
-        "Upload your data files (CSV or Excel)",
-        type=['csv', 'xlsx'],
-        accept_multiple_files=True,
-        key="data_files"
-    )
-    
-    if not uploaded_files:
-        st.info("Please upload one or more data files to process.")
-        return
-    
-    # Process button
-    st.markdown('<div class="big-action-button process-button">', unsafe_allow_html=True)
-    process_clicked = st.button("🚀 Process All Files", key="process_data")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    if process_clicked:
-        results = []
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+    with tab1:
+        st.header("📤 Upload Files for Sharing")
+        st.info("Upload files here (typically from mobile) to generate a share code for accessing from another device.")
         
-        for i, uploaded_file in enumerate(uploaded_files):
-            status_text.text(f"Processing {uploaded_file.name}...")
-            
-            # Load template buffer from repository file
-            template_buffer = load_template_from_file(TEMPLATE_FILE)
-            if not template_buffer:
-                st.error(f"❌ Failed to load template file: {TEMPLATE_FILE}")
-                continue
-            
-            df_clean, output_buffer, output_filename, error = process_single_file(
-                uploaded_file, uploaded_file.name, template_buffer
-            )
-            
-            if error:
-                st.error(f"❌ Error processing {uploaded_file.name}: {error}")
-            else:
-                results.append({
-                    'original_name': uploaded_file.name,
-                    'output_name': output_filename,
-                    'data': df_clean,
-                    'file_buffer': output_buffer
-                })
-                st.success(f"✅ Successfully processed {uploaded_file.name}")
-            
-            progress_bar.progress((i + 1) / len(uploaded_files))
+        # Show HEIC support status
+        if HEIF_AVAILABLE:
+            st.success("✅ HEIC/HEIF image format support is available")
+        else:
+            st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
         
-        status_text.text("Processing complete!")
+        uploaded_files = st.file_uploader(
+            "Choose files to share",
+            accept_multiple_files=True,
+            type=['jpg', 'jpeg', 'png', 'heic', 'heif', 'csv', 'xlsx'],
+            key="mobile_upload",
+            help="Upload images or data files to share between devices"
+        )
         
-        if results:
-            st.header("📊 Processing Results")
+        if uploaded_files:
+            st.subheader("📋 Files to Share")
+            for file in uploaded_files:
+                file_size = len(file.getvalue()) / 1024  # KB
+                st.write(f"📄 {file.name} ({file_size:.1f} KB)")
             
-            # Show summary statistics
-            total_files = len(results)
-            total_rows = sum(len(result['data']) for result in results)
+            st.markdown('<div class="big-action-button share-button">', unsafe_allow_html=True)
+            if st.button("🔗 Generate Share Code", key="generate_share"):
+                try:
+                    share_code = save_shared_files(uploaded_files)
+                    st.success("✅ Files uploaded successfully!")
+                    st.markdown(f'<div class="share-code">Share Code: {share_code}</div>', 
+                              unsafe_allow_html=True)
+                    st.info(f"""
+                    **How to use this code:**
+                    1. Go to your computer and open this app
+                    2. Click on "📥 Access Files" tab
+                    3. Enter the code: **{share_code}**
+                    4. Download and rename your files
+                    
+                    ⏰ **Note**: This code expires in 24 hours
+                    """)
+                except Exception as e:
+                    st.error(f"❌ Error uploading files: {str(e)}")
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    with tab2:
+        st.header("📥 Access Shared Files")
+        st.info("Enter a share code to access files uploaded from another device.")
+        
+        share_code_input = st.text_input(
+            "Enter Share Code",
+            placeholder="Enter 6-character code (e.g., ABC123)",
+            max_chars=6,
+            key="share_code_input",
+            help="Enter the 6-character code generated when uploading files"
+        ).upper()
+        
+        if share_code_input and len(share_code_input) == 6:
+            shared_data = load_shared_files(share_code_input)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Files Processed", total_files)
-            with col2:
-                st.metric("Total Rows Processed", total_rows)
-            
-            # Show sample of processed data
-            if results:
-                st.subheader("📋 Sample of Processed Data")
-                sample_df = results[0]['data'].head(5)
-                st.dataframe(sample_df)
-            
-            st.header("📥 Download Results")
-            
-            # Create ZIP file for bulk download
-            import zipfile
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for result in results:
-                    zip_file.writestr(result['output_name'], result['file_buffer'].getvalue())
-            
-            zip_buffer.seek(0)
-            
-            # Bulk download button
-            if len(results) > 1:
-                st.subheader("📦 Download All Files")
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    st.markdown('<div class="big-action-button download-button">', unsafe_allow_html=True)
-                    st.download_button(
-                        label="📦 Download All Files (ZIP)",
-                        data=zip_buffer.getvalue(),
-                        file_name="Plant_Data_Processing_Results.zip",
-                        mime="application/zip",
-                        key="bulk_download_plant"
-                    )
-                    st.markdown('</div>', unsafe_allow_html=True)
+            if shared_data:
+                files = shared_data["files"]
+                metadata = shared_data["metadata"]
                 
-                st.markdown("---")
-                st.subheader("📄 Individual Files")
-            
-            # Individual file downloads
-            for result in results:
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.text(f"📄 {result['output_name']} ({len(result['data'])} rows)")
-                with col2:
-                    st.download_button(
-                        label="📥 Download",
-                        data=result['file_buffer'].getvalue(),
-                        file_name=result['output_name'],
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        key=f"download_{result['output_name']}"
-                    )
+                st.success(f"✅ Found {len(files)} shared files")
+                
+                upload_time = datetime.fromtimestamp(metadata.get("upload_time", 0))
+                st.write(f"**Uploaded:** {upload_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # File renaming interface
+                st.subheader("🔧 Rename Files (Optional)")
+                st.info("Rename files to more meaningful names before downloading.")
+                
+                # Initialize session state for file renaming
+                if 'shared_file_names' not in st.session_state:
+                    st.session_state.shared_file_names = {}
+                
+                renamed_files = []
+                existing_names = set()
+                
+                for i, file in enumerate(files):
+                    col1, col2 = st.columns([1, 2])
+                    
+                    with col1:
+                        file_size = len(file.getvalue()) / 1024  # KB
+                        st.write(f"📄 {file.name}")
+                        st.write(f"Size: {file_size:.1f} KB")
+                    
+                    with col2:
+                        # Generate safe default name if not already set
+                        file_key = f"{share_code_input}_{file.name}"
+                        if file_key not in st.session_state.shared_file_names:
+                            safe_name = generate_safe_filename(file.name, existing_names)
+                            st.session_state.shared_file_names[file_key] = safe_name
+                        
+                        new_name = st.text_input(
+                            f"New name:",
+                            value=st.session_state.shared_file_names[file_key],
+                            key=f"shared_rename_{i}_{share_code_input}",
+                            help="Enter a new filename (with extension)"
+                        )
+                        
+                        # Update session state
+                        if new_name != st.session_state.shared_file_names[file_key]:
+                            # Ensure uniqueness
+                            safe_new_name = generate_safe_filename(new_name, existing_names)
+                            st.session_state.shared_file_names[file_key] = safe_new_name
+                            if safe_new_name != new_name:
+                                st.warning(f"Name adjusted to avoid conflicts: {safe_new_name}")
+                        
+                        existing_names.add(st.session_state.shared_file_names[file_key])
+                        
+                        # Create renamed file
+                        renamed_file = io.BytesIO(file.getvalue())
+                        renamed_file.name = st.session_state.shared_file_names[file_key]
+                        renamed_files.append(renamed_file)
+                
+                st.subheader("📥 Download Files")
+                
+                # Individual file downloads
+                for i, (original_file, renamed_file) in enumerate(zip(files, renamed_files)):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        if original_file.name != renamed_file.name:
+                            st.write(f"📄 {original_file.name} → {renamed_file.name}")
+                        else:
+                            st.write(f"📄 {renamed_file.name}")
+                    
+                    with col2:
+                        # Determine MIME type
+                        if renamed_file.name.lower().endswith(('.jpg', '.jpeg')):
+                            mime_type = 'image/jpeg'
+                        elif renamed_file.name.lower().endswith('.png'):
+                            mime_type = 'image/png'
+                        elif renamed_file.name.lower().endswith('.xlsx'):
+                            mime_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        elif renamed_file.name.lower().endswith('.csv'):
+                            mime_type = 'text/csv'
+                        else:
+                            mime_type = 'application/octet-stream'
+                        
+                        st.download_button(
+                            label="📥 Download",
+                            data=renamed_file.getvalue(),
+                            file_name=renamed_file.name,
+                            mime=mime_type,
+                            key=f"download_shared_{i}_{share_code_input}"
+                        )
+                
+                # Bulk download option
+                if len(files) > 1:
+                    st.subheader("📦 Bulk Download")
+                    import zipfile
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        for renamed_file in renamed_files:
+                            zip_file.writestr(renamed_file.name, renamed_file.getvalue())
+                    
+                    zip_buffer.seek(0)
+                    
+                    col1, col2, col3 = st.columns([1, 2, 1])
+                    with col2:
+                        st.download_button(
+                            label="📦 Download All Files (ZIP)",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"shared_files_{share_code_input}.zip",
+                            mime="application/zip",
+                            key=f"bulk_download_shared_{share_code_input}"
+                        )
+            else:
+                st.error("❌ Invalid share code or files have expired")
+        elif share_code_input and len(share_code_input) != 6:
+            st.warning("⚠️ Share code must be exactly 6 characters")
 
+# ===================== PLANT DATA PROCESSOR FUNCTIONS =====================
 def unified_processor():
     """Unified processor function that handles both plant data and headwaters processing."""
-    st.markdown('<div class="nav-header">Automated Data Processing and Submission Tool</div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-header">🔄 Unified Plant Data Processor</div>', unsafe_allow_html=True)
     
     # Check if template file exists in repository
     if not check_template_exists(TEMPLATE_FILE):
@@ -1270,7 +1447,8 @@ def main():
         "Choose Function:",
         [
             "🔄 Unified Plant Data Processor", 
-            "🔍 QR Code Plate Processor"
+            "🔍 QR Code Plate Processor",
+            "📱 Mobile File Sharing"
         ],
         key="main_nav"
     )
@@ -1278,31 +1456,36 @@ def main():
     # Function descriptions in sidebar
     st.sidebar.markdown("---")
     with st.sidebar.expander("📖 Function Descriptions", expanded=False):
-        with st.expander("🔄 Unified Plant Data Processor", expanded=False):
-            st.markdown("""
-            **🔄 Unified Plant Data Processor**
-            - Combines Plant Data Processor and Headwaters Submission
-            - Smart detection of special client formats
-            - Fuzzy column mapping for various naming conventions
-            - Multi-sheet processing when appropriate
-            - Optional reference file matching
-            - High-performance vectorized operations
-            """)
+        st.markdown("""
+        **🔄 Unified Plant Data Processor**
+        - Combines Plant Data Processor and Headwaters Submission
+        - Smart detection of special client formats
+        - Fuzzy column mapping for various naming conventions
+        - Multi-sheet processing when appropriate
+        - High-performance vectorized operations
         
-        with st.expander("🔍 QR Code Plate Processor", expanded=False):
-            st.markdown("""
-            **🔍 QR Code Plate Processor**
-            - Process laboratory plate images
-            - Extract QR codes automatically
-            - Generate filled Excel templates
-            - Support for LAMP and QPCR formats
-            """)
+        **🔍 QR Code Plate Processor**
+        - Process laboratory plate images
+        - Extract QR codes automatically
+        - Generate filled Excel templates
+        - Support for LAMP and QPCR formats
+        - File renaming capability
+        - Improved orientation handling
+        
+        **📱 Mobile File Sharing**
+        - Upload files from mobile devices
+        - Generate share codes for cross-device access
+        - Rename files on computer
+        - Perfect for mobile → computer workflow
+        """)
     
     # Route to appropriate function
     if "Unified Plant Data Processor" in app_mode:
         unified_processor()
     elif "QR Code Plate Processor" in app_mode:
         qr_plate_processor()
+    elif "Mobile File Sharing" in app_mode:
+        mobile_file_sharing()
 
 if __name__ == "__main__":
     main()
