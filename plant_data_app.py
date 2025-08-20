@@ -1028,55 +1028,6 @@ def qr_plate_processor():
         st.info("Please upload plate images to process.")
         return
     
-    # Auto-save uploaded images to temporary storage
-    import tempfile
-    import os
-    
-    # Create a session state to store temporary file paths and custom names
-    if 'temp_files' not in st.session_state:
-        st.session_state.temp_files = {}
-    
-    # Save uploaded images to temporary files
-    for uploaded_image in uploaded_images:
-        if uploaded_image.name not in st.session_state.temp_files:
-            # Create temporary file
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{uploaded_image.name}")
-            temp_file.write(uploaded_image.getvalue())
-            temp_file.close()
-            
-            st.session_state.temp_files[uploaded_image.name] = {
-                'temp_path': temp_file.name,
-                'custom_name': ""
-            }
-            st.success(f"✅ Auto-saved {uploaded_image.name} to temporary storage")
-    
-    # Display uploaded images with renaming options
-    st.subheader("📋 Uploaded Images")
-    for idx, uploaded_image in enumerate(uploaded_images):
-        col1, col2, col3 = st.columns([2, 1, 1])
-        
-        with col1:
-            st.write(f"**{uploaded_image.name}**")
-        
-        with col2:
-            # Renaming field with blank default
-            custom_name = st.text_input(
-                "Custom filename:",
-                value=st.session_state.temp_files[uploaded_image.name]['custom_name'],
-                key=f"rename_{idx}",
-                help="Enter a custom name (without extension) or leave blank for original name"
-            )
-            # Update the custom name in session state
-            st.session_state.temp_files[uploaded_image.name]['custom_name'] = custom_name
-        
-        with col3:
-            # Show file size
-            file_size = len(uploaded_image.getvalue())
-            if file_size > 1024 * 1024:
-                st.write(f"{(file_size / (1024 * 1024)):.1f} MB")
-            else:
-                st.write(f"{(file_size / 1024):.1f} KB")
-    
     # Process button
     st.markdown('<div class="big-action-button qr-button">', unsafe_allow_html=True)
     process_clicked = st.button("🔍 Process Plate Images", key="process_plates")
@@ -1104,17 +1055,10 @@ def qr_plate_processor():
             if error:
                 st.error(f"❌ Error processing {uploaded_image.name}: {error}")
             elif result:
-                # Use custom name if provided, otherwise use original name
-                custom_name = st.session_state.temp_files[uploaded_image.name]['custom_name']
-                if custom_name and custom_name.strip():
-                    base_name = custom_name.strip()
-                else:
-                    base_name = uploaded_image.name.rsplit('.', 1)[0]
-                
+                base_name = uploaded_image.name.rsplit('.', 1)[0]
                 results.append({
                     'original_name': uploaded_image.name,
                     'base_name': base_name,
-                    'custom_name': custom_name,
                     'result': result
                 })
                 st.success(f"✅ Successfully processed {uploaded_image.name}")
@@ -1194,17 +1138,14 @@ def qr_plate_processor():
                         st.write(f"**Failed Wells:** {', '.join(result['failed_positions'][:10])}")
                         if len(result['failed_positions']) > 10:
                             st.write(f"... and {len(result['failed_positions']) - 10} more")
-                    
-                    # Show the final filename that will be used
-                    final_filename = f"{result_data['base_name']}_{selected_template}_filled.xlsx"
-                    st.write(f"**Output Filename:** {final_filename}")
                 
                 with col2:
                     # Download Excel
+                    excel_filename = f"{result_data['base_name']}_{selected_template}_filled.xlsx"
                     st.download_button(
                         label="📥 Download Excel",
                         data=result['excel_buffer'].getvalue(),
-                        file_name=final_filename,
+                        file_name=excel_filename,
                         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         key=f"excel_{idx}_{result_data['base_name']}"
                     )
@@ -1214,21 +1155,6 @@ def qr_plate_processor():
                     st.image(result['debug_image'], caption=f"Processed plate with QR detection results")
                 
                 st.markdown("---")
-    
-    # Cleanup temporary files when session ends
-    def cleanup_temp_files():
-        for file_info in st.session_state.temp_files.values():
-            try:
-                if os.path.exists(file_info['temp_path']):
-                    os.unlink(file_info['temp_path'])
-            except:
-                pass
-    
-    # Register cleanup function
-    if 'cleanup_registered' not in st.session_state:
-        st.session_state.cleanup_registered = True
-        import atexit
-        atexit.register(cleanup_temp_files)
 
 def main():
     """Main application function."""
