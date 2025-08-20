@@ -1292,13 +1292,11 @@ def qr_plate_processor_with_sharing():
         st.header("📁 Shared Images")
         
         # Batch processing controls
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2 = st.columns([3, 1])
         with col1:
             st.subheader("Batch Operations")
         with col2:
             batch_process = st.button("🔄 Batch Process All", key="batch_process_all")
-        with col3:
-            batch_download = st.button("📦 Batch Download All", key="batch_download_all")
         
         # Initialize session state for batch results
         if 'batch_results' not in st.session_state:
@@ -1360,9 +1358,11 @@ def qr_plate_processor_with_sharing():
             status_text.text("Batch processing complete!")
             st.success(f"✅ Processed {len(existing_files)} files")
         
-        # Batch download
-        if batch_download and st.session_state.batch_results:
-            st.subheader("📦 Batch Download")
+        # Show batch download button only after processing is complete
+        successful_count = sum(1 for r in st.session_state.batch_results.values() if r.get('success'))
+        if successful_count > 0:
+            st.markdown("---")
+            st.subheader("📦 Download Processed Results")
             
             # Create ZIP file with all processed results
             import zipfile
@@ -1377,16 +1377,18 @@ def qr_plate_processor_with_sharing():
             
             zip_buffer.seek(0)
             
-            # Count successful results
-            successful_count = sum(1 for r in st.session_state.batch_results.values() if r.get('success'))
-            
-            st.download_button(
-                label=f"📦 Download {successful_count} Processed Files (ZIP)",
-                data=zip_buffer.getvalue(),
-                file_name=f"Batch_QR_Results_{selected_template}.zip",
-                mime="application/zip",
-                key="batch_download_zip"
-            )
+            # Big green download button
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.markdown('<div class="big-action-button download-button">', unsafe_allow_html=True)
+                st.download_button(
+                    label=f"📦 Download Processed {successful_count} Sheets",
+                    data=zip_buffer.getvalue(),
+                    file_name=f"Batch_QR_Results_{selected_template}.zip",
+                    mime="application/zip",
+                    key="batch_download_zip"
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
         
         # Display individual files with results
         for file_info in existing_files:
