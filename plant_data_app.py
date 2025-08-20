@@ -49,15 +49,16 @@ st.markdown("""
 <style>
 /* Navigation styling */
 .nav-header {
-    background: linear-gradient(90deg, #f8f9fa, #e9ecef);
-    padding: 1rem;
-    border-radius: 10px;
+    background: #ffffff;
+    padding: 1.5rem;
     margin-bottom: 2rem;
-    color: #495057;
+    color: #2c3e50;
     text-align: center;
-    font-size: 24px;
-    font-weight: bold;
-    border: 1px solid #dee2e6;
+    font-size: 28px;
+    font-weight: 600;
+    border-bottom: 3px solid #3498db;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    letter-spacing: 0.5px;
 }
 
 /* Section separators */
@@ -1178,7 +1179,7 @@ def qr_plate_processor():
 def main():
     """Main application function."""
     # Sidebar navigation
-    st.sidebar.title("🌱 Plant Data Suite")
+    st.sidebar.title("The Riaz Machine")
     st.sidebar.markdown("---")
     
     # Navigation options
