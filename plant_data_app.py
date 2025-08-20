@@ -38,7 +38,7 @@ QR_AVAILABLE = CV2_AVAILABLE and PYZBAR_AVAILABLE
 
 # ===================== CONFIGURATION =====================
 st.set_page_config(
-    page_title="Plant Data Suite",
+    page_title="The Riaz Machine",
     page_icon="🌱",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -49,15 +49,13 @@ st.markdown("""
 <style>
 /* Navigation styling */
 .nav-header {
-    background: #ffffff;
+    background: #000000;
     padding: 1.5rem;
     margin-bottom: 2rem;
-    color: #2c3e50;
+    color: #ffffff;
     text-align: center;
     font-size: 28px;
-    font-weight: 600;
-    border-bottom: 3px solid #3498db;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-weight: bold;
     letter-spacing: 0.5px;
 }
 
