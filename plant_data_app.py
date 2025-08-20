@@ -1193,7 +1193,7 @@ def main():
     # Function descriptions in sidebar
     st.sidebar.markdown("---")
     with st.sidebar.expander("📖 Function Descriptions", expanded=False):
-        if "Unified Plant Data Processor" in app_mode:
+        with st.expander("🔄 Unified Plant Data Processor", expanded=False):
             st.markdown("""
             **🔄 Unified Plant Data Processor**
             - Combines Plant Data Processor and Headwaters Submission
@@ -1203,7 +1203,8 @@ def main():
             - Optional reference file matching
             - High-performance vectorized operations
             """)
-        else:
+        
+        with st.expander("🔍 QR Code Plate Processor", expanded=False):
             st.markdown("""
             **🔍 QR Code Plate Processor**
             - Process laboratory plate images
