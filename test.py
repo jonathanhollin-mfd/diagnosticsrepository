@@ -461,8 +461,76 @@ TEMP_DIR = Path(tempfile.gettempdir()) / "riaz_machine_sessions"
 TEMP_DIR.mkdir(exist_ok=True)
 
 def generate_session_id():
-    """Generate a random 6-character session code."""
-    return secrets.token_urlsafe(6)
+    """Generate share codes in format: Funny-Adjective Animal/TeamMember Non-Animal-Noun"""
+    
+    # Expanded funny adjectives - many more options!
+    funny_adjectives = [
+        'Giggling', 'Snoring', 'Dancing', 'Burping', 'Tickled', 'Wobbly', 'Dizzy', 'Goofy',
+        'Silly', 'Bouncy', 'Fuzzy', 'Squishy', 'Wiggly', 'Sleepy', 'Grumpy', 'Sneezy',
+        'Jiggly', 'Bubbly', 'Cranky', 'Quirky', 'Zany', 'Nutty', 'Loopy', 'Bonkers',
+        'Wacky', 'Dorky', 'Nerdy', 'Perky', 'Snarky', 'Funky', 'Chunky', 'Spunky',
+        'Clumsy', 'Dreamy', 'Steamy', 'Creamy', 'Screamy', 'Beamy', 'Gleamy', 'Foamy',
+        'Bubbling', 'Fizzing', 'Sparking', 'Glowing', 'Blooming', 'Sprouting', 'Chuckling',
+        'Snickering', 'Hiccuping', 'Yawning', 'Stretching', 'Tipsy', 'Groovy', 'Jolly',
+        'Cheerful', 'Merry', 'Jovial', 'Peppy', 'Zippy', 'Snappy', 'Frisky', 'Lively',
+        'Sprightly', 'Vivacious', 'Energetic', 'Spirited', 'Animated', 'Exuberant', 'Vibrant',
+        'Jaunty', 'Bouncing', 'Hopping', 'Skipping', 'Prancing', 'Frolicking', 'Rollicking',
+        'Tumbling', 'Spinning', 'Twirling', 'Swirling', 'Whirling', 'Spiraling', 'Circling',
+        'Floating', 'Drifting', 'Soaring', 'Gliding', 'Sailing', 'Swooping', 'Diving',
+        'Splashing', 'Sloshing', 'Gurgling', 'Bubbling', 'Frothing', 'Foaming', 'Fizzing',
+        'Crackling', 'Popping', 'Snapping', 'Clicking', 'Ticking', 'Humming', 'Buzzing',
+        'Whistling', 'Chirping', 'Tweeting', 'Squeaking', 'Squealing', 'Giggling', 'Tittering',
+        'Snorting', 'Chortling', 'Cackling', 'Howling', 'Roaring', 'Bellowing', 'Trumpeting',
+        'Honking', 'Bleating', 'Neighing', 'Purring', 'Meowing', 'Barking', 'Yapping',
+        'Scampering', 'Scrambling', 'Scurrying', 'Hustling', 'Bustling', 'Rushing', 'Dashing',
+        'Zipping', 'Zooming', 'Racing', 'Speeding', 'Flying', 'Rocketing', 'Blazing',
+        'Flashing', 'Sparkling', 'Twinkling', 'Shimmering', 'Glittering', 'Gleaming', 'Glistening',
+        'Radiant', 'Brilliant', 'Luminous', 'Dazzling', 'Blazing', 'Scorching', 'Sizzling',
+        'Steaming', 'Smoking', 'Smoldering', 'Flaming', 'Burning', 'Heating', 'Warming',
+        'Cooling', 'Chilling', 'Freezing', 'Shivering', 'Quaking', 'Trembling', 'Shaking',
+        'Rattling', 'Jangling', 'Jingling', 'Tinkling', 'Clinking', 'Clanking', 'Banging',
+        'Thumping', 'Pounding', 'Hammering', 'Drumming', 'Beating', 'Tapping', 'Patting',
+        'Stroking', 'Petting', 'Cuddling', 'Snuggling', 'Hugging', 'Squeezing', 'Embracing',
+        'Tickling', 'Poking', 'Prodding', 'Nudging', 'Bumping', 'Jostling', 'Shuffling',
+        'Waddling', 'Toddling', 'Ambling', 'Strolling', 'Meandering', 'Wandering', 'Roaming',
+        'Exploring', 'Investigating', 'Discovering', 'Finding', 'Seeking', 'Searching', 'Hunting',
+        'Gathering', 'Collecting', 'Hoarding', 'Stockpiling', 'Accumulating', 'Amassing', 'Piling'
+    ]
+    
+    # Animal names + special team member names
+    animal_names = [
+        'Llama', 'Penguin', 'Sloth', 'Hippo', 'Narwhal', 'Platypus', 'Flamingo', 'Walrus',
+        'Hamster', 'Ferret', 'Otter', 'Quokka', 'Capybara', 'Axolotl', 'Pangolin', 'Okapi',
+        'Giraffe', 'Elephant', 'Kangaroo', 'Koala', 'Panda', 'Tiger', 'Lion', 'Bear',
+        'Monkey', 'Zebra', 'Rhino', 'Turtle', 'Dolphin', 'Whale', 'Shark', 'Octopus',
+        'Chicken', 'Duck', 'Goose', 'Swan', 'Owl', 'Eagle', 'Parrot', 'Peacock',
+        'Cat', 'Dog', 'Rabbit', 'Mouse', 'Squirrel', 'Chipmunk', 'Raccoon', 'Skunk',
+        'Fox', 'Wolf', 'Deer', 'Moose', 'Elk', 'Bison', 'Camel', 'Alpaca',
+        # Special team member names mixed in!
+        'Marcus', 'Parungasaurus', 'Jonny', 'Angel', 'Chandra', 'Rene', 
+        'Arturo', 'Loraine', 'Riaz', 'Javier', 'Shirley'
+    ]
+    
+    # Non-animal nouns (lab equipment, food, objects, places)
+    non_animal_nouns = [
+        'Pickle', 'Waffle', 'Banana', 'Potato', 'Muffin', 'Noodle', 'Cheese', 'Bacon',
+        'Sandwich', 'Jellybean', 'Pancake', 'Donut', 'Pretzel', 'Burrito', 'Taco', 'Pizza',
+        'Beaker', 'Flask', 'Tube', 'Pipette', 'Petri', 'Enzyme', 'Sample', 'Clone',
+        'Microscope', 'Bunsen', 'Centrifuge', 'Vial', 'Dish', 'Slide', 'Gel', 'Buffer',
+        'Toaster', 'Spatula', 'Doorknob', 'Pillow', 'Lampshade', 'Teapot', 'Spoon', 'Bucket',
+        'Umbrella', 'Rubber', 'Hat', 'Shoe', 'Glove', 'Scarf', 'Sock', 'Button',
+        'Party', 'Circus', 'Fiesta', 'Disco', 'Festival', 'Carnival', 'Parade', 'Show',
+        'Machine', 'Factory', 'Station', 'Laboratory', 'Workshop', 'Studio', 'Academy', 'Center',
+        'Galaxy', 'Universe', 'Planet', 'Rocket', 'Comet', 'Meteor', 'Nebula', 'Orbit',
+        'Castle', 'Tower', 'Bridge', 'Tunnel', 'Garden', 'Fountain', 'Statue', 'Monument'
+    ]
+    
+    # Generate the three-word combination
+    adjective = secrets.choice(funny_adjectives)
+    animal = secrets.choice(animal_names)
+    noun = secrets.choice(non_animal_nouns)
+    
+    return f"{adjective}{animal}{noun}"
 
 def get_session_dir(session_id):
     """Get or create session directory."""
