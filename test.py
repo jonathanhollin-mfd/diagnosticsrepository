@@ -1104,7 +1104,7 @@ def unified_processor():
                     )
 
 def qr_plate_processor():
-    """QR Code Plate Processor function with improved UI and file management."""
+    """QR Code Plate Processor function with integrated file sharing and improved UI."""
     st.markdown('<div class="nav-header">🔍 QR Code Plate Processor</div>', unsafe_allow_html=True)
     
     # Check if QR libraries are available
@@ -1168,6 +1168,9 @@ def qr_plate_processor():
         else:
             st.warning(f"⚠️ {QPCR_TEMPLATE} not found")
     
+    # Cleanup old files periodically
+    cleanup_old_shares(24)
+    
     # Step 1: Template selection
     st.header("🧪 Step 1: Select Template Type")
     template_options = []
@@ -1217,26 +1220,211 @@ def qr_plate_processor():
     if scale_factor != 1.0:
         st.info(f"🔍 Processing images at {scale_factor}x scale for enhanced QR detection")
     
-    # Step 3: Upload images
+    # Step 3: Upload images (with integrated file sharing)
     st.header("📷 Step 3: Upload Plate Images")
     
-    # Show HEIC support status
-    if HEIF_AVAILABLE:
-        st.success("✅ HEIC/HEIF image format support is available")
-    else:
-        st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
-        st.info("To add HEIC support, install: `pip install pillow-heif`")
+    # Add tabs for direct upload vs shared files
+    upload_tab, share_tab = st.tabs(["📤 Direct Upload", "📱 Mobile Sharing"])
     
-    uploaded_images = st.file_uploader(
-        "Upload plate images",
-        type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
-        accept_multiple_files=True,
-        key="plate_images",
-        help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
-    )
+    uploaded_images = None
+    
+    with upload_tab:
+        st.subheader("📤 Direct File Upload")
+        
+        # Show HEIC support status
+        if HEIF_AVAILABLE:
+            st.success("✅ HEIC/HEIF image format support is available")
+        else:
+            st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
+            st.info("To add HEIC support, install: `pip install pillow-heif`")
+        
+        uploaded_images = st.file_uploader(
+            "Upload plate images",
+            type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
+            accept_multiple_files=True,
+            key="plate_images_direct",
+            help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
+        )
+    
+    with share_tab:
+        st.subheader("📱 Mobile → Computer Workflow")
+        st.markdown("""
+        **Perfect for:** Take pictures on phone → Access from computer → Rename → Process
+        """)
+        
+        # Two sub-tabs: Upload for sharing and Access shared files
+        share_upload_tab, share_access_tab = st.tabs(["📤 Upload from Mobile", "💻 Access from Computer"])
+        
+        with share_upload_tab:
+            st.info("Upload files here (typically from mobile) to generate a share code for accessing from another device.")
+            
+            if HEIF_AVAILABLE:
+                st.success("✅ HEIC/HEIF image format support is available")
+            else:
+                st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
+            
+            mobile_uploaded_files = st.file_uploader(
+                "Choose files to share",
+                accept_multiple_files=True,
+                type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
+                key="mobile_upload_qr",
+                help="Upload images to share between devices"
+            )
+            
+            if mobile_uploaded_files:
+                st.subheader("📋 Files to Share")
+                for file in mobile_uploaded_files:
+                    file_size = len(file.getvalue()) / 1024  # KB
+                    st.write(f"📄 {file.name} ({file_size:.1f} KB)")
+                
+                st.markdown('<div class="big-action-button share-button">', unsafe_allow_html=True)
+                if st.button("🔗 Generate Share Code", key="generate_share_qr"):
+                    try:
+                        share_code = save_shared_files(mobile_uploaded_files)
+                        st.success("✅ Files uploaded successfully!")
+                        st.markdown(f'<div class="share-code">Share Code: {share_code}</div>', 
+                                  unsafe_allow_html=True)
+                        st.info(f"""
+                        **How to use this code:**
+                        1. Switch to "💻 Access from Computer" tab
+                        2. Enter the code: **{share_code}**
+                        3. Rename and download your files
+                        4. Return to "📤 Direct Upload" tab to process
+                        
+                        ⏰ **Note**: This code expires in 24 hours
+                        """)
+                    except Exception as e:
+                        st.error(f"❌ Error uploading files: {str(e)}")
+                st.markdown('</div>', unsafe_allow_html=True)
+        
+        with share_access_tab:
+            st.info("Enter a share code to access files uploaded from another device.")
+            
+            share_code_input = st.text_input(
+                "Enter Share Code",
+                placeholder="Enter 6-character code (e.g., ABC123)",
+                max_chars=6,
+                key="share_code_input_qr",
+                help="Enter the 6-character code generated when uploading files"
+            ).upper()
+            
+            if share_code_input and len(share_code_input) == 6:
+                shared_data = load_shared_files(share_code_input)
+                
+                if shared_data:
+                    files = shared_data["files"]
+                    metadata = shared_data["metadata"]
+                    
+                    st.success(f"✅ Found {len(files)} shared files")
+                    
+                    upload_time = datetime.fromtimestamp(metadata.get("upload_time", 0))
+                    st.write(f"**Uploaded:** {upload_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    # File renaming interface
+                    st.subheader("🔧 Rename Files")
+                    st.info("Rename files to more meaningful names before downloading.")
+                    
+                    # Initialize session state for file renaming
+                    if 'shared_file_names_qr' not in st.session_state:
+                        st.session_state.shared_file_names_qr = {}
+                    
+                    renamed_files = []
+                    existing_names = set()
+                    
+                    for i, file in enumerate(files):
+                        col1, col2 = st.columns([1, 2])
+                        
+                        with col1:
+                            file_size = len(file.getvalue()) / 1024  # KB
+                            st.write(f"📄 {file.name}")
+                            st.write(f"Size: {file_size:.1f} KB")
+                        
+                        with col2:
+                            # Generate safe default name if not already set
+                            file_key = f"{share_code_input}_{file.name}"
+                            if file_key not in st.session_state.shared_file_names_qr:
+                                safe_name = generate_safe_filename(file.name, existing_names)
+                                st.session_state.shared_file_names_qr[file_key] = safe_name
+                            
+                            new_name = st.text_input(
+                                f"New name:",
+                                value=st.session_state.shared_file_names_qr[file_key],
+                                key=f"shared_rename_qr_{i}_{share_code_input}",
+                                help="Enter a new filename (with extension)"
+                            )
+                            
+                            # Update session state
+                            if new_name != st.session_state.shared_file_names_qr[file_key]:
+                                # Ensure uniqueness
+                                safe_new_name = generate_safe_filename(new_name, existing_names)
+                                st.session_state.shared_file_names_qr[file_key] = safe_new_name
+                                if safe_new_name != new_name:
+                                    st.warning(f"Name adjusted to avoid conflicts: {safe_new_name}")
+                            
+                            existing_names.add(st.session_state.shared_file_names_qr[file_key])
+                            
+                            # Create renamed file
+                            renamed_file = io.BytesIO(file.getvalue())
+                            renamed_file.name = st.session_state.shared_file_names_qr[file_key]
+                            renamed_files.append(renamed_file)
+                    
+                    st.subheader("📥 Download Files")
+                    st.info("After downloading, switch to 'Direct Upload' tab to process these renamed files.")
+                    
+                    # Individual file downloads
+                    for i, (original_file, renamed_file) in enumerate(zip(files, renamed_files)):
+                        col1, col2 = st.columns([3, 1])
+                        
+                        with col1:
+                            if original_file.name != renamed_file.name:
+                                st.write(f"📄 {original_file.name} → {renamed_file.name}")
+                            else:
+                                st.write(f"📄 {renamed_file.name}")
+                        
+                        with col2:
+                            # Determine MIME type
+                            if renamed_file.name.lower().endswith(('.jpg', '.jpeg')):
+                                mime_type = 'image/jpeg'
+                            elif renamed_file.name.lower().endswith('.png'):
+                                mime_type = 'image/png'
+                            else:
+                                mime_type = 'application/octet-stream'
+                            
+                            st.download_button(
+                                label="📥 Download",
+                                data=renamed_file.getvalue(),
+                                file_name=renamed_file.name,
+                                mime=mime_type,
+                                key=f"download_shared_qr_{i}_{share_code_input}"
+                            )
+                    
+                    # Bulk download option
+                    if len(files) > 1:
+                        st.subheader("📦 Bulk Download")
+                        import zipfile
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            for renamed_file in renamed_files:
+                                zip_file.writestr(renamed_file.name, renamed_file.getvalue())
+                        
+                        zip_buffer.seek(0)
+                        
+                        col1, col2, col3 = st.columns([1, 2, 1])
+                        with col2:
+                            st.download_button(
+                                label="📦 Download All Files (ZIP)",
+                                data=zip_buffer.getvalue(),
+                                file_name=f"shared_files_{share_code_input}.zip",
+                                mime="application/zip",
+                                key=f"bulk_download_shared_qr_{share_code_input}"
+                            )
+                else:
+                    st.error("❌ Invalid share code or files have expired")
+            elif share_code_input and len(share_code_input) != 6:
+                st.warning("⚠️ Share code must be exactly 6 characters")
     
     if not uploaded_images:
-        st.info("Please upload plate images to process.")
+        st.info("Please upload plate images to process using either the Direct Upload or Mobile Sharing tabs.")
         return
     
     # NEW: File Management Section
