@@ -11,11 +11,6 @@ import os
 from typing import List, Tuple, Optional
 import numpy as np
 from PIL import Image
-import tempfile
-import shutil
-import secrets
-import time
-from pathlib import Path
 
 # Add HEIC/HEIF support
 try:
@@ -456,132 +451,6 @@ def process_single_file(uploaded_file, filename, template_buffer):
     except Exception as e:
         return None, None, None, str(e)
 
-# ===================== DEVICE SHARING FUNCTIONS =====================
-TEMP_DIR = Path(tempfile.gettempdir()) / "riaz_machine_sessions"
-TEMP_DIR.mkdir(exist_ok=True)
-
-def generate_session_id():
-    """Generate share codes in format: Funny-Adjective Animal/TeamMember Non-Animal-Noun"""
-    
-    # Expanded funny adjectives - many more options!
-    funny_adjectives = [
-        'Giggling', 'Snoring', 'Dancing', 'Burping', 'Tickled', 'Wobbly', 'Dizzy', 'Goofy',
-        'Silly', 'Bouncy', 'Fuzzy', 'Squishy', 'Wiggly', 'Sleepy', 'Grumpy', 'Sneezy',
-        'Jiggly', 'Bubbly', 'Cranky', 'Quirky', 'Zany', 'Nutty', 'Loopy', 'Bonkers',
-        'Wacky', 'Dorky', 'Nerdy', 'Perky', 'Snarky', 'Funky', 'Chunky', 'Spunky',
-        'Clumsy', 'Dreamy', 'Steamy', 'Creamy', 'Screamy', 'Beamy', 'Gleamy', 'Foamy',
-        'Bubbling', 'Fizzing', 'Sparking', 'Glowing', 'Blooming', 'Sprouting', 'Chuckling',
-        'Snickering', 'Hiccuping', 'Yawning', 'Stretching', 'Tipsy', 'Groovy', 'Jolly',
-        'Cheerful', 'Merry', 'Jovial', 'Peppy', 'Zippy', 'Snappy', 'Frisky', 'Lively',
-        'Sprightly', 'Vivacious', 'Energetic', 'Spirited', 'Animated', 'Exuberant', 'Vibrant',
-        'Jaunty', 'Bouncing', 'Hopping', 'Skipping', 'Prancing', 'Frolicking', 'Rollicking',
-        'Tumbling', 'Spinning', 'Twirling', 'Swirling', 'Whirling', 'Spiraling', 'Circling',
-        'Floating', 'Drifting', 'Soaring', 'Gliding', 'Sailing', 'Swooping', 'Diving',
-        'Splashing', 'Sloshing', 'Gurgling', 'Bubbling', 'Frothing', 'Foaming', 'Fizzing',
-        'Crackling', 'Popping', 'Snapping', 'Clicking', 'Ticking', 'Humming', 'Buzzing',
-        'Whistling', 'Chirping', 'Tweeting', 'Squeaking', 'Squealing', 'Giggling', 'Tittering',
-        'Snorting', 'Chortling', 'Cackling', 'Howling', 'Roaring', 'Bellowing', 'Trumpeting',
-        'Honking', 'Bleating', 'Neighing', 'Purring', 'Meowing', 'Barking', 'Yapping',
-        'Scampering', 'Scrambling', 'Scurrying', 'Hustling', 'Bustling', 'Rushing', 'Dashing',
-        'Zipping', 'Zooming', 'Racing', 'Speeding', 'Flying', 'Rocketing', 'Blazing',
-        'Flashing', 'Sparkling', 'Twinkling', 'Shimmering', 'Glittering', 'Gleaming', 'Glistening',
-        'Radiant', 'Brilliant', 'Luminous', 'Dazzling', 'Blazing', 'Scorching', 'Sizzling',
-        'Steaming', 'Smoking', 'Smoldering', 'Flaming', 'Burning', 'Heating', 'Warming',
-        'Cooling', 'Chilling', 'Freezing', 'Shivering', 'Quaking', 'Trembling', 'Shaking',
-        'Rattling', 'Jangling', 'Jingling', 'Tinkling', 'Clinking', 'Clanking', 'Banging',
-        'Thumping', 'Pounding', 'Hammering', 'Drumming', 'Beating', 'Tapping', 'Patting',
-        'Stroking', 'Petting', 'Cuddling', 'Snuggling', 'Hugging', 'Squeezing', 'Embracing',
-        'Tickling', 'Poking', 'Prodding', 'Nudging', 'Bumping', 'Jostling', 'Shuffling',
-        'Waddling', 'Toddling', 'Ambling', 'Strolling', 'Meandering', 'Wandering', 'Roaming',
-        'Exploring', 'Investigating', 'Discovering', 'Finding', 'Seeking', 'Searching', 'Hunting',
-        'Gathering', 'Collecting', 'Hoarding', 'Stockpiling', 'Accumulating', 'Amassing', 'Piling'
-    ]
-    
-    # Animal names + special team member names
-    animal_names = [
-        'Llama', 'Penguin', 'Sloth', 'Hippo', 'Narwhal', 'Platypus', 'Flamingo', 'Walrus',
-        'Hamster', 'Ferret', 'Otter', 'Quokka', 'Capybara', 'Axolotl', 'Pangolin', 'Okapi',
-        'Giraffe', 'Elephant', 'Kangaroo', 'Koala', 'Panda', 'Tiger', 'Lion', 'Bear',
-        'Monkey', 'Zebra', 'Rhino', 'Turtle', 'Dolphin', 'Whale', 'Shark', 'Octopus',
-        'Chicken', 'Duck', 'Goose', 'Swan', 'Owl', 'Eagle', 'Parrot', 'Peacock',
-        'Cat', 'Dog', 'Rabbit', 'Mouse', 'Squirrel', 'Chipmunk', 'Raccoon', 'Skunk',
-        'Fox', 'Wolf', 'Deer', 'Moose', 'Elk', 'Bison', 'Camel', 'Alpaca',
-        # Special team member names mixed in!
-        'Marcus', 'Parungasaurus', 'Jonny', 'Angel', 'Chandra', 'Rene', 
-        'Arturo', 'Loraine', 'Riaz', 'Javier', 'Shirley'
-    ]
-    
-    # Non-animal nouns (lab equipment, food, objects, places)
-    non_animal_nouns = [
-        'Pickle', 'Waffle', 'Banana', 'Potato', 'Muffin', 'Noodle', 'Cheese', 'Bacon',
-        'Sandwich', 'Jellybean', 'Pancake', 'Donut', 'Pretzel', 'Burrito', 'Taco', 'Pizza',
-        'Beaker', 'Flask', 'Tube', 'Pipette', 'Petri', 'Enzyme', 'Sample', 'Clone',
-        'Microscope', 'Bunsen', 'Centrifuge', 'Vial', 'Dish', 'Slide', 'Gel', 'Buffer',
-        'Toaster', 'Spatula', 'Doorknob', 'Pillow', 'Lampshade', 'Teapot', 'Spoon', 'Bucket',
-        'Umbrella', 'Rubber', 'Hat', 'Shoe', 'Glove', 'Scarf', 'Sock', 'Button',
-        'Party', 'Circus', 'Fiesta', 'Disco', 'Festival', 'Carnival', 'Parade', 'Show',
-        'Machine', 'Factory', 'Station', 'Laboratory', 'Workshop', 'Studio', 'Academy', 'Center',
-        'Galaxy', 'Universe', 'Planet', 'Rocket', 'Comet', 'Meteor', 'Nebula', 'Orbit',
-        'Castle', 'Tower', 'Bridge', 'Tunnel', 'Garden', 'Fountain', 'Statue', 'Monument'
-    ]
-    
-    # Generate the three-word combination
-    adjective = secrets.choice(funny_adjectives)
-    animal = secrets.choice(animal_names)
-    noun = secrets.choice(non_animal_nouns)
-    
-    return f"{adjective}{animal}{noun}"
-
-def get_session_dir(session_id):
-    """Get or create session directory."""
-    session_dir = TEMP_DIR / session_id
-    session_dir.mkdir(exist_ok=True)
-    return session_dir
-
-def save_uploaded_image(session_id, uploaded_file, custom_name):
-    """Save uploaded image to session directory."""
-    session_dir = get_session_dir(session_id)
-    
-    # Get file extension
-    file_ext = uploaded_file.name.split('.')[-1]
-    filename = f"{custom_name}.{file_ext}"
-    filepath = session_dir / filename
-    
-    # Save file
-    with open(filepath, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    
-    return filepath
-
-def list_session_files(session_id):
-    """List all files in session directory."""
-    session_dir = get_session_dir(session_id)
-    if not session_dir.exists():
-        return []
-    
-    files = []
-    for file_path in session_dir.glob("*"):
-        if file_path.is_file():
-            files.append({
-                'name': file_path.name,
-                'path': file_path,
-                'size': file_path.stat().st_size,
-                'modified': file_path.stat().st_mtime
-            })
-    
-    return sorted(files, key=lambda x: x['modified'], reverse=True)
-
-def cleanup_old_sessions(max_age_hours=24):
-    """Clean up sessions older than max_age_hours."""
-    current_time = time.time()
-    max_age_seconds = max_age_hours * 3600
-    
-    for session_dir in TEMP_DIR.iterdir():
-        if session_dir.is_dir():
-            dir_age = current_time - session_dir.stat().st_mtime
-            if dir_age > max_age_seconds:
-                shutil.rmtree(session_dir, ignore_errors=True)
-
 # ===================== QR CODE READER FUNCTIONS =====================
 def add_white_border(img, pixels=40):
     """Add white border around image for better QR detection."""
@@ -603,6 +472,37 @@ def try_rotations(img, angles=(15, -15, 30, -30)):
             return result
     return None
 
+def detect_image_orientation(img):
+    """Detect if image should be rotated for portrait processing."""
+    height, width = img.shape[:2]
+    # If width > height, it's landscape and should be rotated to portrait
+    if width > height:
+        # Rotate 90 degrees counterclockwise to make it portrait
+        img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return img
+
+def generate_safe_filename(original_name, existing_names=None):
+    """Generate a safe filename and avoid duplicates."""
+    if existing_names is None:
+        existing_names = set()
+    
+    # Clean the filename
+    base_name = os.path.splitext(original_name)[0]
+    extension = os.path.splitext(original_name)[1]
+    
+    # Remove problematic characters
+    safe_name = re.sub(r'[<>:"/\\|?*]', '_', base_name)
+    safe_name = re.sub(r'\s+', '_', safe_name)
+    
+    # Handle duplicates
+    counter = 1
+    final_name = f"{safe_name}{extension}"
+    while final_name in existing_names:
+        final_name = f"{safe_name}_{counter}{extension}"
+        counter += 1
+    
+    return final_name
+
 def process_plate_image(uploaded_image, template_buffer, plate_config, scale_factor=1.0):
     """Process a single plate image to extract QR codes."""
     if not QR_AVAILABLE:
@@ -612,6 +512,9 @@ def process_plate_image(uploaded_image, template_buffer, plate_config, scale_fac
         # Read image
         image = Image.open(uploaded_image).convert("RGB")
         img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # FIX: Detect and correct orientation for portrait processing
+        img = detect_image_orientation(img)
         
         # Scale image for higher resolution if requested
         if scale_factor != 1.0:
@@ -1024,7 +927,7 @@ def unified_processor():
                     )
 
 def qr_plate_processor():
-    """QR Code Plate Processor function."""
+    """QR Code Plate Processor function with improved UI and file management."""
     st.markdown('<div class="nav-header">🔍 QR Code Plate Processor</div>', unsafe_allow_html=True)
     
     # Check if QR libraries are available
@@ -1159,6 +1062,47 @@ def qr_plate_processor():
         st.info("Please upload plate images to process.")
         return
     
+    # NEW: File Management Section
+    st.header("📝 Step 4: File Management")
+    
+    # Initialize session state for file renaming
+    if 'file_names' not in st.session_state:
+        st.session_state.file_names = {}
+    
+    # File renaming interface
+    st.subheader("🔧 Rename Files (Optional)")
+    st.info("You can rename files here. This is especially useful for files uploaded from phones with generic names.")
+    
+    existing_names = set()
+    for i, uploaded_image in enumerate(uploaded_images):
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.text(f"Original: {uploaded_image.name}")
+        
+        with col2:
+            # Generate safe default name if not already set
+            if uploaded_image.name not in st.session_state.file_names:
+                safe_name = generate_safe_filename(uploaded_image.name, existing_names)
+                st.session_state.file_names[uploaded_image.name] = safe_name
+            
+            new_name = st.text_input(
+                f"New name:",
+                value=st.session_state.file_names[uploaded_image.name],
+                key=f"rename_{i}_{uploaded_image.name}",
+                help="Enter a new filename (with extension)"
+            )
+            
+            # Update session state
+            if new_name != st.session_state.file_names[uploaded_image.name]:
+                # Ensure uniqueness
+                safe_new_name = generate_safe_filename(new_name, existing_names)
+                st.session_state.file_names[uploaded_image.name] = safe_new_name
+                if safe_new_name != new_name:
+                    st.warning(f"Name adjusted to avoid conflicts: {safe_new_name}")
+            
+            existing_names.add(st.session_state.file_names[uploaded_image.name])
+    
     # Process button
     st.markdown('<div class="big-action-button qr-button">', unsafe_allow_html=True)
     process_clicked = st.button("🔍 Process Plate Images", key="process_plates")
@@ -1173,7 +1117,9 @@ def qr_plate_processor():
         status_text = st.empty()
         
         for i, uploaded_image in enumerate(uploaded_images):
-            status_text.text(f"Processing {uploaded_image.name}...")
+            # Use renamed filename
+            display_name = st.session_state.file_names.get(uploaded_image.name, uploaded_image.name)
+            status_text.text(f"Processing {display_name}...")
             
             # Load fresh template buffer for each image
             template_buffer = load_template_from_file(template_file)
@@ -1184,38 +1130,46 @@ def qr_plate_processor():
             result, _, error = process_plate_image(uploaded_image, template_buffer, plate_config, plate_config.get("scale_factor", 1.0))
             
             if error:
-                st.error(f"❌ Error processing {uploaded_image.name}: {error}")
+                st.error(f"❌ Error processing {display_name}: {error}")
             elif result:
-                base_name = uploaded_image.name.rsplit('.', 1)[0]
+                base_name = os.path.splitext(display_name)[0]
                 results.append({
                     'original_name': uploaded_image.name,
+                    'display_name': display_name,
                     'base_name': base_name,
                     'result': result
                 })
-                st.success(f"✅ Successfully processed {uploaded_image.name}")
+                st.success(f"✅ Successfully processed {display_name}")
             
             progress_bar.progress((i + 1) / len(uploaded_images))
         
         status_text.text("Processing complete!")
         
         if results:
+            # IMPROVED UI: Better layout for results
             st.header("📊 Processing Results")
             
-            # Overall statistics
+            # Overall statistics in a more prominent display
+            st.subheader("📈 Summary Statistics")
+            
             total_plates = len(results)
             total_wells = sum(result['result']['total'] for result in results)
             total_success = sum(result['result']['success'] for result in results)
             total_failed = total_wells - total_success
+            overall_success_rate = (total_success / total_wells * 100) if total_wells > 0 else 0
             
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
+            # Better metrics display (5 columns instead of 4)
+            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+            with metric_col1:
                 st.metric("Plates Processed", total_plates)
-            with col2:
+            with metric_col2:
                 st.metric("Total Wells", total_wells)
-            with col3:
+            with metric_col3:
                 st.metric("Successful Reads", total_success)
-            with col4:
+            with metric_col4:
                 st.metric("Failed Reads", total_failed)
+            with metric_col5:
+                st.metric("Success Rate", f"{overall_success_rate:.1f}%")
             
             # Bulk download section
             st.header("📥 Download Results")
@@ -1236,8 +1190,8 @@ def qr_plate_processor():
             
             # Bulk download button
             st.subheader("📦 Download All Files")
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
+            download_col1, download_col2, download_col3 = st.columns([1, 2, 1])
+            with download_col2:
                 st.markdown('<div class="big-action-button download-button">', unsafe_allow_html=True)
                 st.download_button(
                     label="📦 Download All Files (ZIP)",
@@ -1249,407 +1203,61 @@ def qr_plate_processor():
                 st.markdown('</div>', unsafe_allow_html=True)
             
             st.markdown("---")
-            st.subheader("📄 Individual Files")
             
-            # Individual results
+            # IMPROVED: Individual results with better layout
+            st.subheader("📄 Individual File Results")
+            
             for idx, result_data in enumerate(results):
                 result = result_data['result']
                 
-                st.subheader(f"📄 {result_data['original_name']}")
-                
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    # Statistics
-                    success_rate = (result['success'] / result['total']) * 100 if result['total'] > 0 else 0
-                    st.write(f"**Success Rate:** {success_rate:.1f}% ({result['success']}/{result['total']})")
-                    st.write(f"**Template Used:** {selected_template}")
+                # Create a container for each file result
+                with st.container():
+                    st.markdown(f"### 📄 {result_data['display_name']}")
                     
-                    if result['failed'] > 0:
-                        st.write(f"**Failed Wells:** {', '.join(result['failed_positions'][:10])}")
-                        if len(result['failed_positions']) > 10:
-                            st.write(f"... and {len(result['failed_positions']) - 10} more")
-                
-                with col2:
-                    # Download Excel
-                    excel_filename = f"{result_data['base_name']}_{selected_template}_filled.xlsx"
-                    st.download_button(
-                        label="📥 Download Excel",
-                        data=result['excel_buffer'].getvalue(),
-                        file_name=excel_filename,
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        key=f"excel_{idx}_{result_data['base_name']}"
-                    )
-                
-                # Show debug image
-                with st.expander(f"🔍 View Annotated Image - {result_data['original_name']}"):
-                    st.image(result['debug_image'], caption=f"Processed plate with QR detection results")
-                
-                st.markdown("---")
-
-def qr_plate_processor_with_sharing():
-    """QR Code Plate Processor with device sharing capability."""
-    
-    # Clean up old sessions
-    cleanup_old_sessions()
-    
-    st.markdown('<div class="nav-header">🔍 QR Code Plate Processor (Device Sharing)</div>', unsafe_allow_html=True)
-    
-    # Check if QR libraries are available
-    if not QR_AVAILABLE:
-        st.error("❌ QR Code processing requires additional libraries!")
-        st.info("Install: opencv-python and pyzbar")
-        return
-    
-    # Check templates
-    lamp_exists = check_template_exists(LAMP_TEMPLATE)
-    qpcr_exists = check_template_exists(QPCR_TEMPLATE)
-    
-    if not lamp_exists and not qpcr_exists:
-        st.error(f"❌ Template files not found!")
-        return
-    
-    # === DEVICE SHARING SECTION ===
-    st.header("🔗 Device Sharing")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📱 From Phone")
-        if st.button("🆕 Create Share Code", key="create_share"):
-            share_code = generate_session_id()
-            st.session_state.share_code = share_code
-            st.success(f"**Share Code:** {share_code}")
-            st.info("Use this code on your computer to access uploaded images.")
-    
-    with col2:
-        st.subheader("💻 From Computer")
-        share_input = st.text_input("Enter Share Code:", key="share_input")
-        if st.button("🔗 Access Images", key="access_share"):
-            if share_input.strip():
-                st.session_state.share_code = share_input.strip()
-                st.success(f"✅ Accessing: **{share_input.strip()}**")
-            else:
-                st.error("Please enter a valid share code")
-    
-    # Check for active session
-    current_code = getattr(st.session_state, 'share_code', None)
-    if not current_code:
-        st.info("👆 Create a share code or enter an existing one to begin.")
-        return
-    
-    st.info(f"🔗 **Active Share Code:** {current_code}")
-    
-    # === TEMPLATE SELECTION ===
-    st.header("🧪 Template Selection")
-    template_options = []
-    if lamp_exists:
-        template_options.append("LAMP")
-    if qpcr_exists:
-        template_options.append("QPCR")
-    
-    selected_template = st.radio(
-        "Choose template:",
-        template_options,
-        key="template_sharing"
-    )
-    
-    # === SHOW EXISTING FILES ===
-    existing_files = list_session_files(current_code)
-    if existing_files:
-        st.header("📁 Shared Images")
-        
-        # Batch processing controls
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.subheader("Batch Operations")
-        with col2:
-            batch_process = st.button("🔄 Batch Process All", key="batch_process_all")
-        
-        # Initialize session state for batch results
-        if 'batch_results' not in st.session_state:
-            st.session_state.batch_results = {}
-        
-        # Batch processing
-        if batch_process:
-            st.subheader("🔄 Batch Processing Progress")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            # Load template once for batch processing
-            template_file = LAMP_TEMPLATE if selected_template == "LAMP" else QPCR_TEMPLATE
-            template_buffer = load_template_from_file(template_file)
-            
-            if not template_buffer:
-                st.error("❌ Failed to load template file")
-                return
-            
-            # Process each file
-            for i, file_info in enumerate(existing_files):
-                status_text.text(f"Processing {file_info['name']}... ({i+1}/{len(existing_files)})")
-                
-                try:
-                    with open(file_info['path'], 'rb') as f:
-                        image_data = f.read()
+                    # Create three columns for better layout
+                    info_col, stats_col, download_col = st.columns([2, 2, 1])
                     
-                    # Create file-like object
-                    image_file = io.BytesIO(image_data)
-                    image_file.name = file_info['name']
+                    with info_col:
+                        st.write(f"**Original Name:** {result_data['original_name']}")
+                        st.write(f"**Template Used:** {selected_template}")
+                        if result_data['original_name'] != result_data['display_name']:
+                            st.write(f"**Renamed To:** {result_data['display_name']}")
                     
-                    # Process with existing logic
-                    plate_config = {
-                        "cols": 8, "rows": 12, "margin": 12,
-                        "crop_width": 2180, "crop_height": 3940
-                    }
-                    
-                    result, _, error = process_plate_image(image_file, template_buffer, plate_config)
-                    
-                    if error:
-                        st.session_state.batch_results[file_info['name']] = {
-                            'error': error,
-                            'success': False
-                        }
-                    elif result:
-                        st.session_state.batch_results[file_info['name']] = {
-                            'result': result,
-                            'success': True
-                        }
-                    
-                except Exception as e:
-                    st.session_state.batch_results[file_info['name']] = {
-                        'error': str(e),
-                        'success': False
-                    }
-                
-                progress_bar.progress((i + 1) / len(existing_files))
-            
-            status_text.text("Batch processing complete!")
-            st.success(f"✅ Processed {len(existing_files)} files")
-        
-        # Show batch download button only after processing is complete
-        successful_count = sum(1 for r in st.session_state.batch_results.values() if r.get('success'))
-        if successful_count > 0:
-            st.markdown("---")
-            st.subheader("📦 Download Processed Results")
-            
-            # Create ZIP file with all processed results
-            import zipfile
-            zip_buffer = io.BytesIO()
-            
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for filename, result_data in st.session_state.batch_results.items():
-                    if result_data.get('success') and 'result' in result_data:
-                        # Remove any file extension and create Excel filename
-                        base_name = filename.rsplit('.', 1)[0]
-                        excel_filename = f"{base_name}-{selected_template}-X.xlsx"
-                        zip_file.writestr(excel_filename, result_data['result']['excel_buffer'].getvalue())
-            
-            zip_buffer.seek(0)
-            
-            # Big green download button
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.markdown('<div class="big-action-button download-button">', unsafe_allow_html=True)
-                st.download_button(
-                    label=f"📦 Download Processed {successful_count} Sheets",
-                    data=zip_buffer.getvalue(),
-                    file_name=f"{datetime.now().strftime('%Y-%m-%d')}_QR_Processor_Output_{successful_count}-Sheets.zip",
-                    mime="application/zip",
-                    key="batch_download_zip"
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Display individual files with results
-        for file_info in existing_files:
-            st.markdown("---")
-            
-            # File info row
-            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-            
-            with col1:
-                st.text(f"📷 {file_info['name']}")
-            with col2:
-                size_mb = file_info['size'] / (1024 * 1024)
-                st.text(f"{size_mb:.1f} MB")
-            with col3:
-                # Check if already processed
-                if file_info['name'] in st.session_state.batch_results:
-                    if st.session_state.batch_results[file_info['name']].get('success'):
-                        st.success("✅ Processed")
-                    else:
-                        st.error("❌ Failed")
-                else:
-                    st.text("⏳ Not processed")
-            with col4:
-                if st.button("🔄 Process", key=f"process_shared_{file_info['name']}"):
-                    # Individual processing
-                    try:
-                        with open(file_info['path'], 'rb') as f:
-                            image_data = f.read()
+                    with stats_col:
+                        success_rate = (result['success'] / result['total']) * 100 if result['total'] > 0 else 0
+                        st.write(f"**Success Rate:** {success_rate:.1f}%")
+                        st.write(f"**Wells Read:** {result['success']}/{result['total']}")
                         
-                        # Create file-like object
-                        image_file = io.BytesIO(image_data)
-                        image_file.name = file_info['name']
-                        
-                        # Load template
-                        template_file = LAMP_TEMPLATE if selected_template == "LAMP" else QPCR_TEMPLATE
-                        template_buffer = load_template_from_file(template_file)
-                        
-                        if template_buffer:
-                            # Process with existing logic
-                            plate_config = {
-                                "cols": 8, "rows": 12, "margin": 12,
-                                "crop_width": 2180, "crop_height": 3940
-                            }
-                            
-                            result, _, error = process_plate_image(image_file, template_buffer, plate_config)
-                            
-                            if error:
-                                st.error(f"❌ Error: {error}")
-                                st.session_state.batch_results[file_info['name']] = {
-                                    'error': error,
-                                    'success': False
-                                }
-                            elif result:
-                                st.success(f"✅ Processed {file_info['name']}")
-                                st.session_state.batch_results[file_info['name']] = {
-                                    'result': result,
-                                    'success': True
-                                }
-                                
-                                # Show results in full width
-                                st.subheader(f"📊 Results for {file_info['name']}")
-                                
-                                # Metrics in a row
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.metric("Total Wells", result['total'])
-                                with col2:
-                                    st.metric("Successful", result['success'])
-                                with col3:
-                                    st.metric("Failed", result['failed'])
-                                
-                                # Download button
-                                base_name = file_info['name'].rsplit('.', 1)[0]
-                                excel_filename = f"{base_name}-{selected_template}-X.xlsx"
-                                
-                                st.download_button(
-                                    label="📥 Download Excel",
-                                    data=result['excel_buffer'].getvalue(),
-                                    file_name=excel_filename,
-                                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                    key=f"download_{file_info['name']}"
-                                )
-                                
-                                # Show debug image in full width
-                                with st.expander("🔍 View Detection Results"):
-                                    st.image(result['debug_image'], caption="QR Detection Results")
-                        
-                    except Exception as e:
-                        st.error(f"Error processing file: {e}")
-                        st.session_state.batch_results[file_info['name']] = {
-                            'error': str(e),
-                            'success': False
-                        }
-            
-            # Show results if already processed
-            if file_info['name'] in st.session_state.batch_results:
-                result_data = st.session_state.batch_results[file_info['name']]
-                
-                if result_data.get('success') and 'result' in result_data:
-                    result = result_data['result']
+                        if result['failed'] > 0:
+                            failed_preview = ', '.join(result['failed_positions'][:5])
+                            if len(result['failed_positions']) > 5:
+                                failed_preview += f" (+{len(result['failed_positions']) - 5} more)"
+                            st.write(f"**Failed Wells:** {failed_preview}")
                     
-                    # Show results in full width
-                    st.subheader(f"📊 Results for {file_info['name']}")
+                    with download_col:
+                        # Download Excel
+                        excel_filename = f"{result_data['base_name']}_{selected_template}_filled.xlsx"
+                        st.download_button(
+                            label="📥 Download Excel",
+                            data=result['excel_buffer'].getvalue(),
+                            file_name=excel_filename,
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            key=f"excel_{idx}_{result_data['base_name']}"
+                        )
                     
-                    # Metrics in a row
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Total Wells", result['total'])
-                    with col2:
-                        st.metric("Successful", result['success'])
-                    with col3:
-                        st.metric("Failed", result['failed'])
+                    # Show debug image in an expander below
+                    with st.expander(f"🔍 View Annotated Image - {result_data['display_name']}", expanded=False):
+                        # Create two columns for the image display
+                        img_col1, img_col2 = st.columns([3, 1])
+                        with img_col1:
+                            st.image(result['debug_image'], caption=f"Processed plate with QR detection results")
+                        with img_col2:
+                            st.write("**Legend:**")
+                            st.write("🟢 Green text: QR code detected")
+                            st.write("🔴 Red text: No QR code found")
+                            st.write("🔵 Blue rectangles: Processing grid")
                     
-                    # Download button
-                    base_name = file_info['name'].rsplit('.', 1)[0]
-                    excel_filename = f"{base_name}-{selected_template}-X.xlsx"
-                    
-                    st.download_button(
-                        label="📥 Download Excel",
-                        data=result['excel_buffer'].getvalue(),
-                        file_name=excel_filename,
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        key=f"download_results_{file_info['name']}"
-                    )
-                    
-                    # Show debug image in full width
-                    with st.expander("🔍 View Detection Results"):
-                        st.image(result['debug_image'], caption="QR Detection Results")
-                
-                elif not result_data.get('success'):
-                    st.error(f"❌ Processing failed: {result_data.get('error', 'Unknown error')}")
-    
-    # === UPLOAD SECTION ===
-    st.header("📷 Upload Images")
-    
-    uploaded_images = st.file_uploader(
-        "Upload plate images",
-        type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
-        accept_multiple_files=True,
-        key="shared_images"
-    )
-    
-    if uploaded_images:
-        st.subheader("✏️ Rename and Save")
-        
-        for i, uploaded_image in enumerate(uploaded_images):
-            col1, col2, col3 = st.columns([2, 2, 1])
-            
-            with col1:
-                st.text(f"📷 {uploaded_image.name}")
-            
-            with col2:
-                custom_name = st.text_input(
-                    "Custom name:",
-                    value=uploaded_image.name.rsplit('.', 1)[0],
-                    key=f"rename_shared_{i}"
-                )
-            
-            with col3:
-                if st.button("💾 Save", key=f"save_shared_{i}"):
-                    if custom_name.strip():
-                        try:
-                            filepath = save_uploaded_image(current_code, uploaded_image, custom_name.strip())
-                            st.success(f"✅ Saved: {custom_name}")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error saving: {e}")
-                    else:
-                        st.error("Please enter a custom name")
-    
-    # === INSTRUCTIONS ===
-    with st.expander("📱 How to Use Device Sharing"):
-        st.markdown("""
-        **Step-by-step:**
-        
-        1. **On your phone:**
-           - Click "🆕 Create Share Code"
-           - Note the share code (e.g., "ABC123")
-           - Upload images and rename them
-           - Click "💾 Save" for each image
-        
-        2. **On your computer:**
-           - Enter the share code
-           - Click "🔗 Access Images"
-           - Select template type (LAMP/QPCR)
-           - Click "🔄 Process" on any image
-        
-        **Notes:**
-        - Share codes expire after 24 hours
-        - Images are temporarily stored on the server
-        - Both devices must access the same Streamlit app URL
-        """)
+                    st.markdown("---")
 
 def main():
     """Main application function."""
@@ -1662,7 +1270,7 @@ def main():
         "Choose Function:",
         [
             "🔄 Unified Plant Data Processor", 
-            "📱 QR Processor (Device Sharing)"
+            "🔍 QR Code Plate Processor"
         ],
         key="main_nav"
     )
@@ -1681,22 +1289,20 @@ def main():
             - High-performance vectorized operations
             """)
         
-        with st.expander("📱 QR Processor (Device Sharing)", expanded=False):
+        with st.expander("🔍 QR Code Plate Processor", expanded=False):
             st.markdown("""
-            **📱 QR Processor (Device Sharing)**
-            - Process laboratory plate images with cross-device sharing
-            - Upload images on phone, process on computer
+            **🔍 QR Code Plate Processor**
+            - Process laboratory plate images
             - Extract QR codes automatically
             - Generate filled Excel templates
             - Support for LAMP and QPCR formats
-            - Batch processing and download capabilities
             """)
     
     # Route to appropriate function
     if "Unified Plant Data Processor" in app_mode:
         unified_processor()
-    elif "Device Sharing" in app_mode:
-        qr_plate_processor_with_sharing()
+    elif "QR Code Plate Processor" in app_mode:
+        qr_plate_processor()
 
 if __name__ == "__main__":
     main()
