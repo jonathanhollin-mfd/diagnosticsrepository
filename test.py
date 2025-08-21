@@ -637,8 +637,7 @@ def process_plate_image(uploaded_image, template_buffer, plate_config, scale_fac
         image = Image.open(uploaded_image).convert("RGB")
         img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         
-        # FIX: Detect and correct orientation for portrait processing
-        img = detect_image_orientation(img)
+        # Note: Image orientation is preserved as-is to avoid flipping issues
         
         # Scale image for higher resolution if requested
         if scale_factor != 1.0:
@@ -1081,7 +1080,7 @@ def qr_plate_processor():
                     **How to use this code:**
                     1. Switch to "💻 Access from Computer" tab
                     2. Enter the code: **{share_code}**
-                    3. Rename and download your files
+                    3. Rename your files (no download needed)
                     4. Process your files directly here
                     
                     ⏰ **Note**: This code expires in 24 hours
@@ -1115,7 +1114,7 @@ def qr_plate_processor():
                 
                 # File renaming interface
                 st.subheader("🔧 Rename Files")
-                st.info("Rename files to more meaningful names before downloading.")
+                st.info("Rename files to more meaningful names. No download needed - files will be processed directly.")
                 
                 # Initialize session state for file renaming
                 if 'shared_file_names_qr' not in st.session_state:
@@ -1161,60 +1160,23 @@ def qr_plate_processor():
                         renamed_file.name = st.session_state.shared_file_names_qr[file_key]
                         renamed_files.append(renamed_file)
                 
-                st.subheader("📥 Download Files")
-                st.info("After downloading, you can process these renamed files directly here.")
+                st.subheader("📝 Files Ready for Processing")
+                st.info("Your files have been renamed and are ready to process. Use the file uploader below to process these renamed files.")
                 
-                # Individual file downloads
+                # Show renamed files (no downloads)
                 for i, (original_file, renamed_file) in enumerate(zip(files, renamed_files)):
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        if original_file.name != renamed_file.name:
-                            st.write(f"📄 {original_file.name} → {renamed_file.name}")
-                        else:
-                            st.write(f"📄 {renamed_file.name}")
-                    
-                    with col2:
-                        # Determine MIME type
-                        if renamed_file.name.lower().endswith(('.jpg', '.jpeg')):
-                            mime_type = 'image/jpeg'
-                        elif renamed_file.name.lower().endswith('.png'):
-                            mime_type = 'image/png'
-                        else:
-                            mime_type = 'application/octet-stream'
-                        
-                        st.download_button(
-                            label="📥 Download",
-                            data=renamed_file.getvalue(),
-                            file_name=renamed_file.name,
-                            mime=mime_type,
-                            key=f"download_shared_qr_{i}_{share_code_input}"
-                            )
-                    
-                    # Bulk download option
-                    if len(files) > 1:
-                        st.subheader("📦 Bulk Download")
-                        import zipfile
-                        zip_buffer = io.BytesIO()
-                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                            for renamed_file in renamed_files:
-                                zip_file.writestr(renamed_file.name, renamed_file.getvalue())
-                        
-                        zip_buffer.seek(0)
-                        
-                        col1, col2, col3 = st.columns([1, 2, 1])
-                        with col2:
-                            st.download_button(
-                                label="📦 Download All Files (ZIP)",
-                                data=zip_buffer.getvalue(),
-                                file_name=f"shared_files_{share_code_input}.zip",
-                                mime="application/zip",
-                                key=f"bulk_download_shared_qr_{share_code_input}"
-                            )
-                else:
-                    st.error("❌ Invalid share code or files have expired")
-            elif share_code_input and len(share_code_input) != 1:
-                st.warning("⚠️ Share code must be exactly 1 character (1-9)")
+                    if original_file.name != renamed_file.name:
+                        st.success(f"📄 {original_file.name} → **{renamed_file.name}**")
+                    else:
+                        st.info(f"📄 {renamed_file.name} (no changes)")
+                
+                # Store renamed files in session state for processing
+                st.session_state.renamed_shared_files = renamed_files
+                st.success("✅ Files are now available for processing below!")
+            else:
+                st.error("❌ Invalid share code or files have expired")
+        elif share_code_input and len(share_code_input) != 1:
+            st.warning("⚠️ Share code must be exactly 1 character (1-9)")
     
     # Add a file uploader for shared files
     st.subheader("📤 Upload Files for Processing")
@@ -1226,13 +1188,37 @@ def qr_plate_processor():
         st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
         st.info("To add HEIC support, install: `pip install pillow-heif`")
     
-    uploaded_images = st.file_uploader(
-        "Upload plate images for processing",
-        type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
-        accept_multiple_files=True,
-        key="plate_images_upload",
-        help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
-    )
+    # Check if we have renamed shared files available
+    renamed_shared_files = st.session_state.get('renamed_shared_files', [])
+    
+    if renamed_shared_files:
+        st.subheader("📱 Shared Files Ready for Processing")
+        st.success(f"✅ You have {len(renamed_shared_files)} renamed files ready to process!")
+        for file in renamed_shared_files:
+            st.info(f"📄 {file.name}")
+        
+        # Add option to use shared files
+        use_shared = st.checkbox("Use renamed shared files for processing", value=True, key="use_shared_files")
+        
+        if use_shared:
+            uploaded_images = renamed_shared_files
+            st.success("✅ Using renamed shared files for processing")
+        else:
+            uploaded_images = st.file_uploader(
+                "Upload plate images for processing",
+                type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
+                accept_multiple_files=True,
+                key="plate_images_upload",
+                help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
+            )
+    else:
+        uploaded_images = st.file_uploader(
+            "Upload plate images for processing",
+            type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
+            accept_multiple_files=True,
+            key="plate_images_upload",
+            help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
+        )
     
     if not uploaded_images:
         st.info("Please upload plate images to process using the uploader above or the mobile sharing workflow.")
@@ -1286,6 +1272,7 @@ def qr_plate_processor():
             if error:
                 st.error(f"❌ Error processing {display_name}: {error}")
             elif result:
+                # Use the renamed filename for the Excel output
                 base_name = os.path.splitext(display_name)[0]
                 results.append({
                     'original_name': getattr(uploaded_image, 'name', f'shared_file_{i}'),
