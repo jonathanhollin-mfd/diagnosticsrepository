@@ -217,10 +217,8 @@ def init_shared_files_system():
         os.makedirs(SHARED_FILES_DIR)
 
 def generate_share_code():
-    """Generate a unique 6-digit share code."""
-    timestamp = str(int(time.time()))
-    random_str = str(hash(timestamp + str(np.random.random())))
-    return hashlib.md5(random_str.encode()).hexdigest()[:6].upper()
+    """Generate a unique single-digit share code (1-9)."""
+    return str(np.random.randint(1, 10))
 
 def save_shared_files(files, metadata=None):
     """Save files with a unique share code and return the code."""
@@ -256,7 +254,7 @@ def save_shared_files(files, metadata=None):
 def load_shared_files(share_code):
     """Load files using a share code."""
     init_shared_files_system()
-    share_dir = os.path.join(SHARED_FILES_DIR, share_code.upper())
+    share_dir = os.path.join(SHARED_FILES_DIR, share_code)
     metadata_path = os.path.join(share_dir, "metadata.json")
     
     if not os.path.exists(metadata_path):
@@ -1097,13 +1095,13 @@ def qr_plate_processor():
         
         share_code_input = st.text_input(
             "Enter Share Code",
-            placeholder="Enter 6-character code (e.g., ABC123)",
-            max_chars=6,
+            placeholder="Enter single-digit code (1-9)",
+            max_chars=1,
             key="share_code_input_qr",
-            help="Enter the 6-character code generated when uploading files"
-        ).upper()
+            help="Enter the single-digit code generated when uploading files"
+        )
         
-        if share_code_input and len(share_code_input) == 6:
+        if share_code_input and len(share_code_input) == 1:
             shared_data = load_shared_files(share_code_input)
             
             if shared_data:
@@ -1215,8 +1213,8 @@ def qr_plate_processor():
                             )
                 else:
                     st.error("❌ Invalid share code or files have expired")
-            elif share_code_input and len(share_code_input) != 6:
-                st.warning("⚠️ Share code must be exactly 6 characters")
+            elif share_code_input and len(share_code_input) != 1:
+                st.warning("⚠️ Share code must be exactly 1 character (1-9)")
     
     # Add a file uploader for shared files
     st.subheader("📤 Upload Files for Processing")
