@@ -1050,17 +1050,12 @@ def qr_plate_processor():
     with share_upload_tab:
         st.info("Upload files here (typically from mobile) to generate a share code for accessing from another device.")
         
-        if HEIF_AVAILABLE:
-            st.success("✅ HEIC/HEIF image format support is available")
-        else:
-            st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
-        
         mobile_uploaded_files = st.file_uploader(
-            "Choose files to share",
+            "Drag and drop files here",
             accept_multiple_files=True,
             type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
             key="mobile_upload_qr",
-            help="Upload images to share between devices"
+            help="Limit 200MB per file • JPG, JPEG, PNG, HEIC, HEIF"
         )
         
         if mobile_uploaded_files:
@@ -1178,17 +1173,7 @@ def qr_plate_processor():
         elif share_code_input and len(share_code_input) != 1:
             st.warning("⚠️ Share code must be exactly 1 character (1-9)")
     
-    # Add a file uploader for shared files
-    st.subheader("📤 Upload Files for Processing")
-    st.info("Upload your plate images here to process them. You can also use the mobile sharing workflow above.")
-    
-    if HEIF_AVAILABLE:
-        st.success("✅ HEIC/HEIF image format support is available")
-    else:
-        st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
-        st.info("To add HEIC support, install: `pip install pillow-heif`")
-    
-    # Check if we have renamed shared files available
+    # Check if we have renamed shared files available for processing
     renamed_shared_files = st.session_state.get('renamed_shared_files', [])
     
     if renamed_shared_files:
@@ -1196,32 +1181,12 @@ def qr_plate_processor():
         st.success(f"✅ You have {len(renamed_shared_files)} renamed files ready to process!")
         for file in renamed_shared_files:
             st.info(f"📄 {file.name}")
-        
-        # Add option to use shared files
-        use_shared = st.checkbox("Use renamed shared files for processing", value=True, key="use_shared_files")
-        
-        if use_shared:
-            uploaded_images = renamed_shared_files
-            st.success("✅ Using renamed shared files for processing")
-        else:
-            uploaded_images = st.file_uploader(
-                "Upload plate images for processing",
-                type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
-                accept_multiple_files=True,
-                key="plate_images_upload",
-                help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
-            )
+        uploaded_images = renamed_shared_files
     else:
-        uploaded_images = st.file_uploader(
-            "Upload plate images for processing",
-            type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
-            accept_multiple_files=True,
-            key="plate_images_upload",
-            help="Upload laboratory plate images for QR code extraction. HEIC files from Apple devices are supported if pillow-heif is installed."
-        )
+        st.info("Please upload plate images using the mobile sharing workflow above.")
+        uploaded_images = None
     
     if not uploaded_images:
-        st.info("Please upload plate images to process using the uploader above or the mobile sharing workflow.")
         return
     
     # Process button
