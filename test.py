@@ -768,196 +768,8 @@ def process_plate_image(uploaded_image, template_buffer, plate_config, scale_fac
     except Exception as e:
         return None, None, str(e)
 
-# ===================== MOBILE FILE SHARING FUNCTION =====================
-def mobile_file_sharing():
-    """Mobile-friendly file sharing interface."""
-    st.markdown('<div class="nav-header">📱 Mobile File Sharing</div>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    **📱 Upload from Mobile → 💻 Access from Computer**
-    
-    Perfect for the workflow: Take pictures on your phone, upload here, then access from your computer to rename and process.
-    """)
-    
-    # Cleanup old files periodically
-    cleanup_old_shares(24)
-    
-    # Two tabs: Upload and Access
-    tab1, tab2 = st.tabs(["📤 Upload Files", "📥 Access Files"])
-    
-    with tab1:
-        st.header("📤 Upload Files for Sharing")
-        st.info("Upload files here (typically from mobile) to generate a share code for accessing from another device.")
-        
-        # Show HEIC support status
-        if HEIF_AVAILABLE:
-            st.success("✅ HEIC/HEIF image format support is available")
-        else:
-            st.warning("⚠️ HEIC/HEIF support not available - please convert Apple HEIC files to JPG/PNG format first")
-        
-        uploaded_files = st.file_uploader(
-            "Choose files to share",
-            accept_multiple_files=True,
-            type=['jpg', 'jpeg', 'png', 'heic', 'heif', 'csv', 'xlsx'],
-            key="mobile_upload",
-            help="Upload images or data files to share between devices"
-        )
-        
-        if uploaded_files:
-            st.subheader("📋 Files to Share")
-            for file in uploaded_files:
-                file_size = len(file.getvalue()) / 1024  # KB
-                st.write(f"📄 {file.name} ({file_size:.1f} KB)")
-            
-            st.markdown('<div class="big-action-button share-button">', unsafe_allow_html=True)
-            if st.button("🔗 Generate Share Code", key="generate_share"):
-                try:
-                    share_code = save_shared_files(uploaded_files)
-                    st.success("✅ Files uploaded successfully!")
-                    st.markdown(f'<div class="share-code">Share Code: {share_code}</div>', 
-                              unsafe_allow_html=True)
-                    st.info(f"""
-                    **How to use this code:**
-                    1. Go to your computer and open this app
-                    2. Click on "📥 Access Files" tab
-                    3. Enter the code: **{share_code}**
-                    4. Download and rename your files
-                    
-                    ⏰ **Note**: This code expires in 24 hours
-                    """)
-                except Exception as e:
-                    st.error(f"❌ Error uploading files: {str(e)}")
-            st.markdown('</div>', unsafe_allow_html=True)
-    
-    with tab2:
-        st.header("📥 Access Shared Files")
-        st.info("Enter a share code to access files uploaded from another device.")
-        
-        share_code_input = st.text_input(
-            "Enter Share Code",
-            placeholder="Enter 6-character code (e.g., ABC123)",
-            max_chars=6,
-            key="share_code_input",
-            help="Enter the 6-character code generated when uploading files"
-        ).upper()
-        
-        if share_code_input and len(share_code_input) == 6:
-            shared_data = load_shared_files(share_code_input)
-            
-            if shared_data:
-                files = shared_data["files"]
-                metadata = shared_data["metadata"]
-                
-                st.success(f"✅ Found {len(files)} shared files")
-                
-                upload_time = datetime.fromtimestamp(metadata.get("upload_time", 0))
-                st.write(f"**Uploaded:** {upload_time.strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                # File renaming interface
-                st.subheader("🔧 Rename Files (Optional)")
-                st.info("Rename files to more meaningful names before downloading.")
-                
-                # Initialize session state for file renaming
-                if 'shared_file_names' not in st.session_state:
-                    st.session_state.shared_file_names = {}
-                
-                renamed_files = []
-                existing_names = set()
-                
-                for i, file in enumerate(files):
-                    col1, col2 = st.columns([1, 2])
-                    
-                    with col1:
-                        file_size = len(file.getvalue()) / 1024  # KB
-                        st.write(f"📄 {file.name}")
-                        st.write(f"Size: {file_size:.1f} KB")
-                    
-                    with col2:
-                        # Generate safe default name if not already set
-                        file_key = f"{share_code_input}_{file.name}"
-                        if file_key not in st.session_state.shared_file_names:
-                            safe_name = generate_safe_filename(file.name, existing_names)
-                            st.session_state.shared_file_names[file_key] = safe_name
-                        
-                        new_name = st.text_input(
-                            f"New name:",
-                            value=st.session_state.shared_file_names[file_key],
-                            key=f"shared_rename_{i}_{share_code_input}",
-                            help="Enter a new filename (with extension)"
-                        )
-                        
-                        # Update session state
-                        if new_name != st.session_state.shared_file_names[file_key]:
-                            # Ensure uniqueness
-                            safe_new_name = generate_safe_filename(new_name, existing_names)
-                            st.session_state.shared_file_names[file_key] = safe_new_name
-                            if safe_new_name != new_name:
-                                st.warning(f"Name adjusted to avoid conflicts: {safe_new_name}")
-                        
-                        existing_names.add(st.session_state.shared_file_names[file_key])
-                        
-                        # Create renamed file
-                        renamed_file = io.BytesIO(file.getvalue())
-                        renamed_file.name = st.session_state.shared_file_names[file_key]
-                        renamed_files.append(renamed_file)
-                
-                st.subheader("📥 Download Files")
-                
-                # Individual file downloads
-                for i, (original_file, renamed_file) in enumerate(zip(files, renamed_files)):
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        if original_file.name != renamed_file.name:
-                            st.write(f"📄 {original_file.name} → {renamed_file.name}")
-                        else:
-                            st.write(f"📄 {renamed_file.name}")
-                    
-                    with col2:
-                        # Determine MIME type
-                        if renamed_file.name.lower().endswith(('.jpg', '.jpeg')):
-                            mime_type = 'image/jpeg'
-                        elif renamed_file.name.lower().endswith('.png'):
-                            mime_type = 'image/png'
-                        elif renamed_file.name.lower().endswith('.xlsx'):
-                            mime_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                        elif renamed_file.name.lower().endswith('.csv'):
-                            mime_type = 'text/csv'
-                        else:
-                            mime_type = 'application/octet-stream'
-                        
-                        st.download_button(
-                            label="📥 Download",
-                            data=renamed_file.getvalue(),
-                            file_name=renamed_file.name,
-                            mime=mime_type,
-                            key=f"download_shared_{i}_{share_code_input}"
-                        )
-                
-                # Bulk download option
-                if len(files) > 1:
-                    st.subheader("📦 Bulk Download")
-                    import zipfile
-                    zip_buffer = io.BytesIO()
-                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                        for renamed_file in renamed_files:
-                            zip_file.writestr(renamed_file.name, renamed_file.getvalue())
-                    
-                    zip_buffer.seek(0)
-                    
-                    col1, col2, col3 = st.columns([1, 2, 1])
-                    with col2:
-                        st.download_button(
-                            label="📦 Download All Files (ZIP)",
-                            data=zip_buffer.getvalue(),
-                            file_name=f"shared_files_{share_code_input}.zip",
-                            mime="application/zip",
-                            key=f"bulk_download_shared_{share_code_input}"
-                        )
-            else:
-                st.error("❌ Invalid share code or files have expired")
-        elif share_code_input and len(share_code_input) != 6:
-            st.warning("⚠️ Share code must be exactly 6 characters")
+# ===================== MOBILE FILE SHARING FUNCTION (REMOVED - NOW INTEGRATED INTO QR PROCESSOR) =====================
+# This function is no longer needed as sharing is integrated into qr_plate_processor()
 
 # ===================== PLANT DATA PROCESSOR FUNCTIONS =====================
 def unified_processor():
@@ -1427,48 +1239,50 @@ def qr_plate_processor():
         st.info("Please upload plate images to process using either the Direct Upload or Mobile Sharing tabs.")
         return
     
-    # NEW: File Management Section
-    st.header("📝 Step 4: File Management")
-    
-    # Initialize session state for file renaming
-    if 'file_names' not in st.session_state:
-        st.session_state.file_names = {}
-    
-    # File renaming interface
-    st.subheader("🔧 Rename Files (Optional)")
-    st.info("You can rename files here. This is especially useful for files uploaded from phones with generic names.")
-    
-    existing_names = set()
-    for i, uploaded_image in enumerate(uploaded_images):
-        col1, col2 = st.columns([1, 2])
+    # Step 4: File Management (for direct uploads or additional renaming)
+    if files_to_process and uploaded_images == files_to_process:  # Only show if using direct upload
+        st.header("📝 Step 4: File Management")
         
-        with col1:
-            st.text(f"Original: {uploaded_image.name}")
+        # Initialize session state for file renaming
+        if 'file_names' not in st.session_state:
+            st.session_state.file_names = {}
         
-        with col2:
-            # Generate safe default name if not already set
-            if uploaded_image.name not in st.session_state.file_names:
-                safe_name = generate_safe_filename(uploaded_image.name, existing_names)
-                st.session_state.file_names[uploaded_image.name] = safe_name
+        # File renaming interface
+        st.subheader("🔧 Rename Files (Optional)")
+        st.info("You can rename files here. This is especially useful for files uploaded from phones with generic names.")
+        
+        existing_names = set()
+        for i, uploaded_image in enumerate(files_to_process):
+            col1, col2 = st.columns([1, 2])
             
-            new_name = st.text_input(
-                f"New name:",
-                value=st.session_state.file_names[uploaded_image.name],
-                key=f"rename_{i}_{uploaded_image.name}",
-                help="Enter a new filename (with extension)"
-            )
+            with col1:
+                st.text(f"Original: {uploaded_image.name}")
             
-            # Update session state
-            if new_name != st.session_state.file_names[uploaded_image.name]:
-                # Ensure uniqueness
-                safe_new_name = generate_safe_filename(new_name, existing_names)
-                st.session_state.file_names[uploaded_image.name] = safe_new_name
-                if safe_new_name != new_name:
-                    st.warning(f"Name adjusted to avoid conflicts: {safe_new_name}")
-            
-            existing_names.add(st.session_state.file_names[uploaded_image.name])
+            with col2:
+                # Generate safe default name if not already set
+                if uploaded_image.name not in st.session_state.file_names:
+                    safe_name = generate_safe_filename(uploaded_image.name, existing_names)
+                    st.session_state.file_names[uploaded_image.name] = safe_name
+                
+                new_name = st.text_input(
+                    f"New name:",
+                    value=st.session_state.file_names[uploaded_image.name],
+                    key=f"rename_{i}_{uploaded_image.name}",
+                    help="Enter a new filename (with extension)"
+                )
+                
+                # Update session state
+                if new_name != st.session_state.file_names[uploaded_image.name]:
+                    # Ensure uniqueness
+                    safe_new_name = generate_safe_filename(new_name, existing_names)
+                    st.session_state.file_names[uploaded_image.name] = safe_new_name
+                    if safe_new_name != new_name:
+                        st.warning(f"Name adjusted to avoid conflicts: {safe_new_name}")
+                
+                existing_names.add(st.session_state.file_names[uploaded_image.name])
     
     # Process button
+    st.header("🚀 Step 5: Process Images")
     st.markdown('<div class="big-action-button qr-button">', unsafe_allow_html=True)
     process_clicked = st.button("🔍 Process Plate Images", key="process_plates")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1481,9 +1295,15 @@ def qr_plate_processor():
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        for i, uploaded_image in enumerate(uploaded_images):
-            # Use renamed filename
-            display_name = st.session_state.file_names.get(uploaded_image.name, uploaded_image.name)
+        for i, uploaded_image in enumerate(files_to_process):
+            # Use renamed filename (either from shared files or direct upload renaming)
+            if hasattr(uploaded_image, 'name') and uploaded_image.name in st.session_state.get('file_names', {}):
+                # Direct upload with renaming
+                display_name = st.session_state.file_names[uploaded_image.name]
+            else:
+                # Shared files already have renamed names
+                display_name = uploaded_image.name
+            
             status_text.text(f"Processing {display_name}...")
             
             # Load fresh template buffer for each image
@@ -1499,14 +1319,14 @@ def qr_plate_processor():
             elif result:
                 base_name = os.path.splitext(display_name)[0]
                 results.append({
-                    'original_name': uploaded_image.name,
+                    'original_name': getattr(uploaded_image, 'name', f'shared_file_{i}'),
                     'display_name': display_name,
                     'base_name': base_name,
                     'result': result
                 })
                 st.success(f"✅ Successfully processed {display_name}")
             
-            progress_bar.progress((i + 1) / len(uploaded_images))
+            progress_bar.progress((i + 1) / len(files_to_process))
         
         status_text.text("Processing complete!")
         
@@ -1630,13 +1450,12 @@ def main():
     st.sidebar.title("The Riaz Machine")
     st.sidebar.markdown("---")
     
-    # Navigation options
+    # Navigation options (removed separate Mobile File Sharing)
     app_mode = st.sidebar.radio(
         "Choose Function:",
         [
             "🔄 Unified Plant Data Processor", 
-            "🔍 QR Code Plate Processor",
-            "📱 Mobile File Sharing"
+            "🔍 QR Code Plate Processor"
         ],
         key="main_nav"
     )
@@ -1657,14 +1476,10 @@ def main():
         - Extract QR codes automatically
         - Generate filled Excel templates
         - Support for LAMP and QPCR formats
+        - **Integrated mobile file sharing**
         - File renaming capability
         - Improved orientation handling
-        
-        **📱 Mobile File Sharing**
-        - Upload files from mobile devices
-        - Generate share codes for cross-device access
-        - Rename files on computer
-        - Perfect for mobile → computer workflow
+        - Perfect mobile → computer workflow
         """)
     
     # Route to appropriate function
@@ -1672,8 +1487,6 @@ def main():
         unified_processor()
     elif "QR Code Plate Processor" in app_mode:
         qr_plate_processor()
-    elif "Mobile File Sharing" in app_mode:
-        mobile_file_sharing()
 
 if __name__ == "__main__":
     main()
