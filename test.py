@@ -581,8 +581,8 @@ def detect_image_orientation(img):
     height, width = img.shape[:2]
     # If width > height, it's landscape and should be rotated to portrait
     if width > height:
-        # Rotate 90 degrees counterclockwise to make it portrait
-        img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        # Rotate 90 degrees clockwise to make it portrait
+        img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
     return img
 
 def generate_safe_filename(original_name, existing_names=None):
@@ -637,7 +637,8 @@ def process_plate_image(uploaded_image, template_buffer, plate_config, scale_fac
         image = Image.open(uploaded_image).convert("RGB")
         img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
         
-        # Note: Image orientation is preserved as-is to avoid flipping issues
+        # Detect and correct orientation for portrait processing
+        img = detect_image_orientation(img)
         
         # Scale image for higher resolution if requested
         if scale_factor != 1.0:
