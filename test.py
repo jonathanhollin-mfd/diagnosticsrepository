@@ -1239,50 +1239,8 @@ def qr_plate_processor():
         st.info("Please upload plate images to process using either the Direct Upload or Mobile Sharing tabs.")
         return
     
-    # Step 4: File Management (for direct uploads or additional renaming)
-    if files_to_process and uploaded_images == files_to_process:  # Only show if using direct upload
-        st.header("📝 Step 4: File Management")
-        
-        # Initialize session state for file renaming
-        if 'file_names' not in st.session_state:
-            st.session_state.file_names = {}
-        
-        # File renaming interface
-        st.subheader("🔧 Rename Files (Optional)")
-        st.info("You can rename files here. This is especially useful for files uploaded from phones with generic names.")
-        
-        existing_names = set()
-        for i, uploaded_image in enumerate(files_to_process):
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                st.text(f"Original: {uploaded_image.name}")
-            
-            with col2:
-                # Generate safe default name if not already set
-                if uploaded_image.name not in st.session_state.file_names:
-                    safe_name = generate_safe_filename(uploaded_image.name, existing_names)
-                    st.session_state.file_names[uploaded_image.name] = safe_name
-                
-                new_name = st.text_input(
-                    f"New name:",
-                    value=st.session_state.file_names[uploaded_image.name],
-                    key=f"rename_{i}_{uploaded_image.name}",
-                    help="Enter a new filename (with extension)"
-                )
-                
-                # Update session state
-                if new_name != st.session_state.file_names[uploaded_image.name]:
-                    # Ensure uniqueness
-                    safe_new_name = generate_safe_filename(new_name, existing_names)
-                    st.session_state.file_names[uploaded_image.name] = safe_new_name
-                    if safe_new_name != new_name:
-                        st.warning(f"Name adjusted to avoid conflicts: {safe_new_name}")
-                
-                existing_names.add(st.session_state.file_names[uploaded_image.name])
-    
     # Process button
-    st.header("🚀 Step 5: Process Images")
+    st.header("🚀 Step 4: Process Images")
     st.markdown('<div class="big-action-button qr-button">', unsafe_allow_html=True)
     process_clicked = st.button("🔍 Process Plate Images", key="process_plates")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1296,14 +1254,8 @@ def qr_plate_processor():
         status_text = st.empty()
         
         for i, uploaded_image in enumerate(files_to_process):
-            # Use renamed filename (either from shared files or direct upload renaming)
-            if hasattr(uploaded_image, 'name') and uploaded_image.name in st.session_state.get('file_names', {}):
-                # Direct upload with renaming
-                display_name = st.session_state.file_names[uploaded_image.name]
-            else:
-                # Shared files already have renamed names
-                display_name = uploaded_image.name
-            
+            # Files from shared access already have their renamed names
+            display_name = uploaded_image.name
             status_text.text(f"Processing {display_name}...")
             
             # Load fresh template buffer for each image
