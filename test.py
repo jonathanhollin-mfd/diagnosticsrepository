@@ -958,12 +958,14 @@ def unified_processor():
                     )
 
 def create_camera_interface():
-    """Create HTML5 camera interface for mobile devices."""
+    """Create HTML5 camera interface for mobile devices with enhanced iOS Safari compatibility."""
     return """
     <!DOCTYPE html>
     <html>
     <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
         <style>
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1170,10 +1172,30 @@ def create_camera_interface():
                     padding: 15px 20px;
                     font-size: 18px;
                     min-width: 140px;
+                    /* iOS Safari touch improvements */
+                    -webkit-tap-highlight-color: transparent;
+                    -webkit-touch-callout: none;
+                    -webkit-user-select: none;
+                    user-select: none;
                 }
                 .photos-grid {
                     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
                 }
+                /* iOS Safari specific fixes */
+                #video {
+                    -webkit-transform: translateZ(0);
+                    transform: translateZ(0);
+                }
+            }
+            
+            /* Additional iOS Safari compatibility */
+            .btn:active {
+                transform: scale(0.95);
+            }
+            
+            /* Prevent zoom on input focus (iOS Safari) */
+            input, textarea, select {
+                font-size: 16px;
             }
         </style>
     </head>
@@ -1245,9 +1267,18 @@ def create_camera_interface():
                 }
                 
                 checkHTTPS() {
+                    console.log('Protocol:', location.protocol);
+                    console.log('Hostname:', location.hostname);
+                    console.log('In iframe:', window.self !== window.top);
+                    
                     if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
                         this.showStatus('Camera requires HTTPS connection. Please use a secure connection.', 'error');
                         this.startBtn.disabled = true;
+                    }
+                    
+                    // Check if we're in an iframe (common with Streamlit)
+                    if (window.self !== window.top) {
+                        this.showStatus('⚠️ Running in iframe - camera access may be restricted on some devices. If camera fails, try opening in a new tab.', 'info');
                     }
                 }
                 
@@ -1268,16 +1299,36 @@ def create_camera_interface():
                     try {
                         this.showStatus('Starting camera...', 'info');
                         
+                        // Enhanced error checking for iOS Safari
+                        if (!navigator.mediaDevices) {
+                            throw new Error('mediaDevices not supported - please use a modern browser');
+                        }
+                        
+                        if (!navigator.mediaDevices.getUserMedia) {
+                            throw new Error('getUserMedia not supported - please use a modern browser');
+                        }
+                        
+                        // Enhanced constraints for better iOS Safari compatibility
                         const constraints = {
                             video: {
-                                facingMode: this.currentFacingMode,
-                                width: { ideal: 1280 },
-                                height: { ideal: 720 }
+                                facingMode: { ideal: this.currentFacingMode },
+                                width: { ideal: 1920, max: 1920 },
+                                height: { ideal: 1080, max: 1080 },
+                                // Additional iOS Safari specific constraints
+                                frameRate: { ideal: 30, max: 30 }
                             }
                         };
                         
+                        console.log('Requesting camera with constraints:', constraints);
+                        
                         this.stream = await navigator.mediaDevices.getUserMedia(constraints);
                         this.video.srcObject = this.stream;
+                        
+                        // Wait for video to be ready
+                        this.video.onloadedmetadata = () => {
+                            console.log('Video metadata loaded');
+                            this.video.play().catch(e => console.warn('Video play failed:', e));
+                        };
                         
                         this.startBtn.disabled = true;
                         this.switchBtn.disabled = false;
@@ -1287,7 +1338,7 @@ def create_camera_interface():
                         this.showStatus('Camera started successfully!', 'success');
                         
                     } catch (error) {
-                        console.error('Camera error:', error);
+                        console.error('Detailed camera error:', error);
                         this.handleCameraError(error);
                     }
                 }
@@ -1421,21 +1472,61 @@ def create_camera_interface():
                 
                 handleCameraError(error) {
                     let message = 'Camera error occurred. ';
+                    let troubleshooting = '';
                     
                     if (error.name === 'NotAllowedError') {
-                        message += 'Camera permission denied. Please allow camera access and try again.';
+                        message += 'Camera permission denied. ';
+                        troubleshooting = `
+                            <br><br><strong>iOS Safari Troubleshooting:</strong>
+                            <br>1. Go to Settings → Safari → Camera → Allow
+                            <br>2. Refresh the page and try again
+                            <br>3. If in iframe, try opening in a new tab
+                        `;
                     } else if (error.name === 'NotFoundError') {
                         message += 'No camera found on this device.';
                     } else if (error.name === 'NotSupportedError') {
                         message += 'Camera not supported in this browser.';
+                        troubleshooting = '<br><br>Please use Safari on iOS or a modern browser.';
                     } else if (error.name === 'NotReadableError') {
                         message += 'Camera is already in use by another application.';
+                        troubleshooting = '<br><br>Close other camera apps and try again.';
+                    } else if (error.name === 'OverconstrainedError') {
+                        message += 'Camera constraints not supported. Trying with basic constraints...';
+                        // Try with basic constraints
+                        this.tryBasicConstraints();
+                        return;
                     } else {
                         message += error.message || 'Unknown error occurred.';
+                        troubleshooting = '<br><br>Check browser console for detailed error information.';
                     }
                     
-                    this.showStatus(message, 'error');
+                    this.showStatus(message + troubleshooting, 'error');
                     this.startBtn.disabled = false;
+                }
+                
+                async tryBasicConstraints() {
+                    try {
+                        console.log('Trying with basic constraints...');
+                        const basicConstraints = {
+                            video: {
+                                facingMode: this.currentFacingMode
+                            }
+                        };
+                        
+                        this.stream = await navigator.mediaDevices.getUserMedia(basicConstraints);
+                        this.video.srcObject = this.stream;
+                        
+                        this.startBtn.disabled = true;
+                        this.switchBtn.disabled = false;
+                        this.captureBtn.disabled = false;
+                        this.stopBtn.disabled = false;
+                        
+                        this.showStatus('Camera started with basic settings!', 'success');
+                        
+                    } catch (error) {
+                        console.error('Basic constraints also failed:', error);
+                        this.handleCameraError(error);
+                    }
                 }
             }
             
@@ -1583,6 +1674,12 @@ def qr_plate_processor():
     with camera_tab:
         st.info("📷 **Direct Camera Capture** - Take photos directly through your browser without using the native camera app.")
         
+        # iOS Safari iframe warning
+        st.warning("""
+        **⚠️ iOS Safari Users:** If camera access fails, this may be due to iframe restrictions. 
+        Try opening the app in a new tab or use the "📤 Upload from Mobile" tab as an alternative.
+        """)
+        
         # Camera interface
         st.components.v1.html(create_camera_interface(), height=800, scrolling=True)
         
@@ -1608,6 +1705,37 @@ def qr_plate_processor():
             - Ensure good lighting for QR code detection
             - Hold device steady while capturing
             - Review photos before accepting
+            """)
+        
+        # iOS Safari troubleshooting
+        with st.expander("🔧 iOS Safari Troubleshooting", expanded=False):
+            st.markdown("""
+            **Common iOS Safari Issues & Solutions:**
+            
+            **Camera Permission Denied:**
+            1. Go to **Settings → Safari → Camera → Allow**
+            2. Refresh the page and try again
+            3. If still blocked, try opening in a new tab
+            
+            **Camera Not Working in iframe:**
+            - Streamlit runs in an iframe which can restrict camera access
+            - Try opening the app in a new tab: Right-click → "Open in New Tab"
+            - Or use the browser's address bar to navigate directly
+            
+            **Camera Not Found:**
+            - Make sure you're using Safari on iOS (not Chrome or other browsers)
+            - Check that no other apps are using the camera
+            - Restart Safari if needed
+            
+            **Poor Performance:**
+            - Close other apps to free up memory
+            - Ensure good lighting for better camera performance
+            - Try switching between front/back cameras
+            
+            **Still Having Issues?**
+            - Use the "📤 Upload from Mobile" tab as an alternative
+            - Take photos with your native camera app and upload them
+            - Check browser console for detailed error messages
             """)
         
         # Check for camera photos in session storage
