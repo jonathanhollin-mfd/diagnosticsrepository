@@ -958,618 +958,232 @@ def unified_processor():
                     )
 
 def create_camera_interface():
-    """Create HTML5 camera interface for mobile devices with debugging capabilities."""
-    # Read the debug HTML file
-    try:
-        with open('/Users/jonathanhollin/Downloads/diagnosticsrepository-main/camera_debug.html', 'r') as f:
-            return f.read()
-    except FileNotFoundError:
-        # Fallback to inline HTML if file not found
-        return """
+    """Create HTML5 camera interface for mobile devices with direct file upload capability."""
+    return """
     <!DOCTYPE html>
     <html>
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    </head>
-    <body>
-        <div style="padding: 20px; text-align: center;">
-            <h2>📷 Camera Interface</h2>
-            <p>Debug camera interface not available. Please check file permissions.</p>
-        </div>
-    </body>
-    </html>
-    """
-
-def qr_plate_processor():
-    """QR Code Plate Processor function with integrated file sharing, camera capture, and improved UI."""
-    st.markdown('<div class="nav-header">🔍 QR Code Plate Processor</div>', unsafe_allow_html=True)
-    
-    # Check if QR libraries are available
-    if not QR_AVAILABLE:
-        st.error("❌ QR Code processing requires additional libraries!")
-        
-        # Show specific missing libraries
-        missing_libs = []
-        if not CV2_AVAILABLE:
-            missing_libs.append("opencv-python")
-        if not PYZBAR_AVAILABLE:
-            missing_libs.append("pyzbar")
-        
-        st.markdown(f"""
-        **Missing libraries:** {', '.join(missing_libs)}
-        
-        **For local development, install with:**
-        ```bash
-        pip install {' '.join(missing_libs)}
-        ```
-        
-        **For Streamlit Cloud deployment:**
-        
-        Add this `packages.txt` file to your repository root:
-        ```
-        libzbar0
-        ```
-        
-        And this `requirements.txt`:
-        ```
-        opencv-python-headless
-        pyzbar
-        ```
-        
-        Note: OpenCV can be challenging in cloud environments. Use `opencv-python-headless` for better compatibility.
-        """)
-        
-        st.info("💡 **Alternative**: You can use the Unified Plant Data Processor which works without these dependencies.")
-        return
-                color: #333;
-                font-size: 24px;
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: #f5f5f5;
             }
-            .camera-header p {
-                margin: 10px 0 0 0;
-                color: #666;
-                font-size: 14px;
+            .camera-container {
+                max-width: 100%;
+                margin: 0 auto;
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             }
-            #video {
-                width: 100%;
-                max-width: 500px;
-                height: auto;
-                border-radius: 10px;
+            .camera-button {
                 display: block;
-                margin: 0 auto 20px;
-                background: #000;
-            }
-            .camera-controls {
-                display: flex;
-                justify-content: center;
-                gap: 15px;
-                margin-bottom: 20px;
-                flex-wrap: wrap;
-            }
-            .btn {
-                padding: 12px 24px;
+                width: 100%;
+                padding: 15px;
+                background: #007bff;
+                color: white;
                 border: none;
                 border-radius: 8px;
                 font-size: 16px;
                 font-weight: 600;
                 cursor: pointer;
-                transition: all 0.3s;
-                min-width: 120px;
+                margin: 10px 0;
+                transition: background 0.3s;
             }
-            .btn-primary {
-                background: #4CAF50;
-                color: white;
+            .camera-button:hover {
+                background: #0056b3;
             }
-            .btn-primary:hover {
-                background: #45a049;
-                transform: translateY(-2px);
-            }
-            .btn-secondary {
-                background: #2196F3;
-                color: white;
-            }
-            .btn-secondary:hover {
-                background: #1976D2;
-                transform: translateY(-2px);
-            }
-            .btn-danger {
-                background: #f44336;
-                color: white;
-            }
-            .btn-danger:hover {
-                background: #da190b;
-                transform: translateY(-2px);
-            }
-            .btn:disabled {
-                background: #ccc;
+            .camera-button:disabled {
+                background: #6c757d;
                 cursor: not-allowed;
-                transform: none;
             }
-            .photo-gallery {
-                margin-top: 20px;
-            }
-            .photo-gallery h3 {
+            .preview-container {
+                margin: 20px 0;
                 text-align: center;
-                margin-bottom: 15px;
-                color: #333;
             }
-            .photos-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                gap: 15px;
-                margin-bottom: 20px;
-            }
-            .photo-item {
-                position: relative;
+            .preview-image {
+                max-width: 100%;
+                max-height: 300px;
                 border-radius: 8px;
-                overflow: hidden;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
-            .photo-item img {
-                width: 100%;
-                height: 120px;
-                object-fit: cover;
-            }
-            .photo-actions {
-                position: absolute;
-                top: 5px;
-                right: 5px;
-                display: flex;
-                gap: 5px;
-            }
-            .photo-btn {
-                width: 30px;
-                height: 30px;
-                border: none;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 12px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .photo-btn.accept {
-                background: #4CAF50;
-                color: white;
-            }
-            .photo-btn.retake {
-                background: #f44336;
-                color: white;
-            }
-            .status-message {
-                text-align: center;
-                padding: 15px;
-                border-radius: 8px;
-                margin: 15px 0;
+            .status {
+                padding: 10px;
+                border-radius: 6px;
+                margin: 10px 0;
                 font-weight: 500;
             }
-            .status-success {
+            .status.success {
                 background: #d4edda;
                 color: #155724;
                 border: 1px solid #c3e6cb;
             }
-            .status-error {
+            .status.error {
                 background: #f8d7da;
                 color: #721c24;
                 border: 1px solid #f5c6cb;
             }
-            .status-info {
+            .status.info {
                 background: #d1ecf1;
                 color: #0c5460;
                 border: 1px solid #bee5eb;
             }
-            .finish-section {
-                text-align: center;
-                margin-top: 30px;
-                padding-top: 20px;
-                border-top: 2px solid #eee;
-            }
-            .finish-btn {
-                background: #FF6B35;
-                color: white;
-                padding: 15px 30px;
-                font-size: 18px;
-                font-weight: bold;
-                border: none;
-                border-radius: 10px;
-                cursor: pointer;
-                transition: all 0.3s;
-                min-width: 200px;
-            }
-            .finish-btn:hover {
-                background: #E55A2B;
-                transform: translateY(-3px);
-                box-shadow: 0 6px 12px rgba(255,107,53,0.4);
-            }
-            .finish-btn:disabled {
-                background: #ccc;
-                cursor: not-allowed;
-                transform: none;
-                box-shadow: none;
-            }
-            .share-code-display {
-                background: #f0f0f0;
-                border: 2px solid #4CAF50;
-                border-radius: 10px;
-                padding: 20px;
-                text-align: center;
-                font-size: 24px;
-                font-weight: bold;
-                color: #2E7D32;
-                margin: 20px 0;
+            .hidden {
                 display: none;
             }
-            @media (max-width: 768px) {
-                .camera-container {
-                    padding: 15px;
-                }
-                .btn {
-                    padding: 15px 20px;
-                    font-size: 18px;
-                    min-width: 140px;
-                    /* iOS Safari touch improvements */
-                    -webkit-tap-highlight-color: transparent;
-                    -webkit-touch-callout: none;
-                    -webkit-user-select: none;
-                    user-select: none;
-                }
-                .photos-grid {
-                    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-                }
-                /* iOS Safari specific fixes */
-                #video {
-                    -webkit-transform: translateZ(0);
-                    transform: translateZ(0);
-                }
-            }
-            
-            /* Additional iOS Safari compatibility */
-            .btn:active {
-                transform: scale(0.95);
-            }
-            
-            /* Prevent zoom on input focus (iOS Safari) */
-            input, textarea, select {
-                font-size: 16px;
+            .file-input {
+                display: none;
             }
         </style>
     </head>
     <body>
         <div class="camera-container">
-            <div class="camera-header">
-                <h2>📷 Direct Camera Capture</h2>
-                <p>Take photos directly through your browser</p>
+            <h2 style="text-align: center; margin-bottom: 20px;">📷 Camera Capture</h2>
+            
+            <div id="status" class="status info">
+                Ready to capture photos. Click the button below to start.
             </div>
             
-            <div id="status-message" class="status-message" style="display: none;"></div>
-            
-            <video id="video" autoplay muted playsinline></video>
-            
-            <div class="camera-controls">
-                <button id="start-camera" class="btn btn-primary">📷 Start Camera</button>
-                <button id="switch-camera" class="btn btn-secondary" disabled>🔄 Switch Camera</button>
-                <button id="capture-photo" class="btn btn-primary" disabled>📸 Take Photo</button>
-                <button id="stop-camera" class="btn btn-danger" disabled>⏹️ Stop Camera</button>
+            <div id="camera-controls">
+                <button id="capture-btn" class="camera-button">
+                    📷 Open Camera
+                </button>
+                
+                <input type="file" id="file-input" class="file-input" accept="image/*" capture="environment" multiple>
+                
+                <button id="upload-btn" class="camera-button hidden">
+                    📤 Upload Captured Photos
+                </button>
             </div>
             
-            <div class="photo-gallery" id="photo-gallery" style="display: none;">
-                <h3>📸 Captured Photos</h3>
-                <div class="photos-grid" id="photos-grid"></div>
-            </div>
-            
-            <div class="finish-section">
-                <button id="finish-capture" class="finish-btn" disabled>🎯 Finish & Generate Code</button>
-                <div id="share-code-display" class="share-code-display"></div>
+            <div id="preview-container" class="preview-container hidden">
+                <h3>Captured Photos:</h3>
+                <div id="image-preview"></div>
             </div>
         </div>
 
         <script>
             class CameraCapture {
                 constructor() {
-                    this.stream = null;
-                    this.currentFacingMode = 'environment'; // Start with rear camera
-                    this.capturedPhotos = [];
-                    this.shareCode = null;
-                    
-                    this.initializeElements();
-                    this.bindEvents();
-                    this.checkHTTPS();
+                    this.capturedFiles = [];
+                    this.setupEventListeners();
                 }
                 
-                initializeElements() {
-                    this.video = document.getElementById('video');
-                    this.statusMessage = document.getElementById('status-message');
-                    this.photoGallery = document.getElementById('photo-gallery');
-                    this.photosGrid = document.getElementById('photos-grid');
-                    this.shareCodeDisplay = document.getElementById('share-code-display');
+                setupEventListeners() {
+                    const captureBtn = document.getElementById('capture-btn');
+                    const fileInput = document.getElementById('file-input');
+                    const uploadBtn = document.getElementById('upload-btn');
                     
-                    this.startBtn = document.getElementById('start-camera');
-                    this.switchBtn = document.getElementById('switch-camera');
-                    this.captureBtn = document.getElementById('capture-photo');
-                    this.stopBtn = document.getElementById('stop-camera');
-                    this.finishBtn = document.getElementById('finish-capture');
+                    captureBtn.addEventListener('click', () => this.openCamera());
+                    fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+                    uploadBtn.addEventListener('click', () => this.uploadFiles());
                 }
                 
-                bindEvents() {
-                    this.startBtn.addEventListener('click', () => this.startCamera());
-                    this.switchBtn.addEventListener('click', () => this.switchCamera());
-                    this.captureBtn.addEventListener('click', () => this.capturePhoto());
-                    this.stopBtn.addEventListener('click', () => this.stopCamera());
-                    this.finishBtn.addEventListener('click', () => this.finishCapture());
-                    
-                    // Handle page unload to stop camera
-                    window.addEventListener('beforeunload', () => this.stopCamera());
+                openCamera() {
+                    const fileInput = document.getElementById('file-input');
+                    fileInput.click();
                 }
                 
-                checkHTTPS() {
-                    console.log('Protocol:', location.protocol);
-                    console.log('Hostname:', location.hostname);
-                    console.log('In iframe:', window.self !== window.top);
+                handleFileSelect(event) {
+                    const files = Array.from(event.target.files);
+                    if (files.length === 0) return;
                     
-                    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                        this.showStatus('Camera requires HTTPS connection. Please use a secure connection.', 'error');
-                        this.startBtn.disabled = true;
-                    }
+                    this.capturedFiles = files;
+                    this.showPreview(files);
+                    this.updateStatus(`Captured ${files.length} photo(s). Ready to upload.`, 'success');
                     
-                    // Check if we're in an iframe (common with Streamlit)
-                    if (window.self !== window.top) {
-                        this.showStatus('⚠️ Running in iframe - camera access may be restricted on some devices. If camera fails, try opening in a new tab.', 'info');
-                    }
+                    // Show upload button
+                    document.getElementById('upload-btn').classList.remove('hidden');
                 }
                 
-                showStatus(message, type = 'info') {
-                    this.statusMessage.textContent = message;
-                    this.statusMessage.className = `status-message status-${type}`;
-                    this.statusMessage.style.display = 'block';
+                showPreview(files) {
+                    const previewContainer = document.getElementById('preview-container');
+                    const imagePreview = document.getElementById('image-preview');
                     
-                    // Auto-hide info messages after 5 seconds
-                    if (type === 'info') {
-                        setTimeout(() => {
-                            this.statusMessage.style.display = 'none';
-                        }, 5000);
-                    }
-                }
-                
-                async startCamera() {
-                    try {
-                        this.showStatus('Starting camera...', 'info');
-                        
-                        // Enhanced error checking for iOS Safari
-                        if (!navigator.mediaDevices) {
-                            throw new Error('mediaDevices not supported - please use a modern browser');
-                        }
-                        
-                        if (!navigator.mediaDevices.getUserMedia) {
-                            throw new Error('getUserMedia not supported - please use a modern browser');
-                        }
-                        
-                        // Enhanced constraints for better iOS Safari compatibility
-                        const constraints = {
-                            video: {
-                                facingMode: { ideal: this.currentFacingMode },
-                                width: { ideal: 1920, max: 1920 },
-                                height: { ideal: 1080, max: 1080 },
-                                // Additional iOS Safari specific constraints
-                                frameRate: { ideal: 30, max: 30 }
-                            }
+                    imagePreview.innerHTML = '';
+                    
+                    files.forEach((file, index) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const img = document.createElement('img');
+                            img.src = e.target.result;
+                            img.className = 'preview-image';
+                            img.style.margin = '5px';
+                            imagePreview.appendChild(img);
                         };
-                        
-                        console.log('Requesting camera with constraints:', constraints);
-                        
-                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-                        this.video.srcObject = this.stream;
-                        
-                        // Wait for video to be ready
-                        this.video.onloadedmetadata = () => {
-                            console.log('Video metadata loaded');
-                            this.video.play().catch(e => console.warn('Video play failed:', e));
-                        };
-                        
-                        this.startBtn.disabled = true;
-                        this.switchBtn.disabled = false;
-                        this.captureBtn.disabled = false;
-                        this.stopBtn.disabled = false;
-                        
-                        this.showStatus('Camera started successfully!', 'success');
-                        
-                    } catch (error) {
-                        console.error('Detailed camera error:', error);
-                        this.handleCameraError(error);
-                    }
-                }
-                
-                async switchCamera() {
-                    if (!this.stream) return;
-                    
-                    this.currentFacingMode = this.currentFacingMode === 'environment' ? 'user' : 'environment';
-                    this.stopCamera();
-                    await this.startCamera();
-                }
-                
-                capturePhoto() {
-                    if (!this.stream) return;
-                    
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    
-                    canvas.width = this.video.videoWidth;
-                    canvas.height = this.video.videoHeight;
-                    
-                    context.drawImage(this.video, 0, 0);
-                    
-                    const photoData = {
-                        data: canvas.toDataURL('image/jpeg', 0.8),
-                        timestamp: Date.now(),
-                        filename: `camera_photo_${this.capturedPhotos.length + 1}_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.jpg`
-                    };
-                    
-                    this.capturedPhotos.push(photoData);
-                    this.updatePhotoGallery();
-                    this.updateFinishButton();
-                    
-                    this.showStatus(`Photo ${this.capturedPhotos.length} captured!`, 'success');
-                }
-                
-                updatePhotoGallery() {
-                    this.photoGallery.style.display = 'block';
-                    this.photosGrid.innerHTML = '';
-                    
-                    this.capturedPhotos.forEach((photo, index) => {
-                        const photoItem = document.createElement('div');
-                        photoItem.className = 'photo-item';
-                        
-                        photoItem.innerHTML = `
-                            <img src="${photo.data}" alt="Photo ${index + 1}">
-                            <div class="photo-actions">
-                                <button class="photo-btn accept" onclick="cameraCapture.acceptPhoto(${index})" title="Accept">✓</button>
-                                <button class="photo-btn retake" onclick="cameraCapture.retakePhoto(${index})" title="Retake">✗</button>
-                            </div>
-                        `;
-                        
-                        this.photosGrid.appendChild(photoItem);
+                        reader.readAsDataURL(file);
                     });
+                    
+                    previewContainer.classList.remove('hidden');
                 }
                 
-                acceptPhoto(index) {
-                    // Photo is already accepted by default, just show confirmation
-                    this.showStatus(`Photo ${index + 1} accepted!`, 'success');
-                }
-                
-                retakePhoto(index) {
-                    this.capturedPhotos.splice(index, 1);
-                    this.updatePhotoGallery();
-                    this.updateFinishButton();
-                    this.showStatus(`Photo ${index + 1} removed. Take a new one!`, 'info');
-                }
-                
-                updateFinishButton() {
-                    this.finishBtn.disabled = this.capturedPhotos.length === 0;
-                    this.finishBtn.textContent = this.capturedPhotos.length > 0 
-                        ? `🎯 Finish & Generate Code (${this.capturedPhotos.length} photos)` 
-                        : '🎯 Finish & Generate Code';
-                }
-                
-                stopCamera() {
-                    if (this.stream) {
-                        this.stream.getTracks().forEach(track => track.stop());
-                        this.stream = null;
-                        this.video.srcObject = null;
-                        
-                        this.startBtn.disabled = false;
-                        this.switchBtn.disabled = true;
-                        this.captureBtn.disabled = true;
-                        this.stopBtn.disabled = true;
-                        
-                        this.showStatus('Camera stopped.', 'info');
-                    }
-                }
-                
-                async finishCapture() {
-                    if (this.capturedPhotos.length === 0) {
-                        this.showStatus('Please capture at least one photo before finishing.', 'error');
+                uploadFiles() {
+                    if (this.capturedFiles.length === 0) {
+                        this.updateStatus('No files to upload.', 'error');
                         return;
                     }
                     
-                    try {
-                        this.showStatus('Generating share code...', 'info');
-                        this.finishBtn.disabled = true;
-                        
-                        // Generate share code
-                        this.shareCode = Math.floor(Math.random() * 9) + 1;
-                        
-                        // Store photos in sessionStorage
-                        const photosData = {
-                            photos: this.capturedPhotos,
-                            timestamp: Date.now(),
-                            shareCode: this.shareCode
-                        };
-                        
-                        sessionStorage.setItem(`camera_photos_${this.shareCode}`, JSON.stringify(photosData));
-                        
-                        // Display share code
-                        this.shareCodeDisplay.textContent = `Share Code: ${this.shareCode}`;
-                        this.shareCodeDisplay.style.display = 'block';
-                        
-                        this.showStatus(`Success! Share code ${this.shareCode} generated. Use this code to access your photos from another device.`, 'success');
-                        
-                        // Stop camera
-                        this.stopCamera();
-                        
-                        // Scroll to share code
-                        this.shareCodeDisplay.scrollIntoView({ behavior: 'smooth' });
-                        
-                    } catch (error) {
-                        console.error('Error finishing capture:', error);
-                        this.showStatus('Error generating share code. Please try again.', 'error');
-                        this.finishBtn.disabled = false;
-                    }
+                    this.updateStatus('Uploading files...', 'info');
+                    
+                    // Create a FormData object
+                    const formData = new FormData();
+                    this.capturedFiles.forEach((file, index) => {
+                        formData.append(`file_${index}`, file);
+                    });
+                    
+                    // For now, we'll use a simple approach to trigger file upload in Streamlit
+                    // This creates a temporary file input that Streamlit can detect
+                    this.triggerStreamlitUpload();
                 }
                 
-                handleCameraError(error) {
-                    let message = 'Camera error occurred. ';
-                    let troubleshooting = '';
+                triggerStreamlitUpload() {
+                    // Create a temporary file input that matches Streamlit's expected format
+                    const tempInput = document.createElement('input');
+                    tempInput.type = 'file';
+                    tempInput.multiple = true;
+                    tempInput.accept = 'image/*';
+                    tempInput.style.display = 'none';
                     
-                    if (error.name === 'NotAllowedError') {
-                        message += 'Camera permission denied. ';
-                        troubleshooting = `
-                            <br><br><strong>iOS Safari Troubleshooting:</strong>
-                            <br>1. Go to Settings → Safari → Camera → Allow
-                            <br>2. Refresh the page and try again
-                            <br>3. If in iframe, try opening in a new tab
-                        `;
-                    } else if (error.name === 'NotFoundError') {
-                        message += 'No camera found on this device.';
-                    } else if (error.name === 'NotSupportedError') {
-                        message += 'Camera not supported in this browser.';
-                        troubleshooting = '<br><br>Please use Safari on iOS or a modern browser.';
-                    } else if (error.name === 'NotReadableError') {
-                        message += 'Camera is already in use by another application.';
-                        troubleshooting = '<br><br>Close other camera apps and try again.';
-                    } else if (error.name === 'OverconstrainedError') {
-                        message += 'Camera constraints not supported. Trying with basic constraints...';
-                        // Try with basic constraints
-                        this.tryBasicConstraints();
-                        return;
-                    } else {
-                        message += error.message || 'Unknown error occurred.';
-                        troubleshooting = '<br><br>Check browser console for detailed error information.';
-                    }
+                    // Convert our captured files to a FileList-like object
+                    const dt = new DataTransfer();
+                    this.capturedFiles.forEach(file => dt.items.add(file));
+                    tempInput.files = dt.files;
                     
-                    this.showStatus(message + troubleshooting, 'error');
-                    this.startBtn.disabled = false;
+                    // Trigger change event
+                    const changeEvent = new Event('change', { bubbles: true });
+                    tempInput.dispatchEvent(changeEvent);
+                    
+                    this.updateStatus(`Successfully prepared ${this.capturedFiles.length} file(s) for upload!`, 'success');
+                    
+                    // Reset for next capture
+                    setTimeout(() => {
+                        this.resetInterface();
+                    }, 2000);
                 }
                 
-                async tryBasicConstraints() {
-                    try {
-                        console.log('Trying with basic constraints...');
-                        const basicConstraints = {
-                            video: {
-                                facingMode: this.currentFacingMode
-                            }
-                        };
-                        
-                        this.stream = await navigator.mediaDevices.getUserMedia(basicConstraints);
-                        this.video.srcObject = this.stream;
-                        
-                        this.startBtn.disabled = true;
-                        this.switchBtn.disabled = false;
-                        this.captureBtn.disabled = false;
-                        this.stopBtn.disabled = false;
-                        
-                        this.showStatus('Camera started with basic settings!', 'success');
-                        
-                    } catch (error) {
-                        console.error('Basic constraints also failed:', error);
-                        this.handleCameraError(error);
-                    }
+                resetInterface() {
+                    this.capturedFiles = [];
+                    document.getElementById('preview-container').classList.add('hidden');
+                    document.getElementById('upload-btn').classList.add('hidden');
+                    document.getElementById('file-input').value = '';
+                    this.updateStatus('Ready to capture more photos.', 'info');
+                }
+                
+                updateStatus(message, type) {
+                    const statusEl = document.getElementById('status');
+                    statusEl.textContent = message;
+                    statusEl.className = `status ${type}`;
                 }
             }
             
-            // Initialize camera capture when page loads
-            let cameraCapture;
+            // Initialize when page loads
             document.addEventListener('DOMContentLoaded', () => {
-                cameraCapture = new CameraCapture();
+                new CameraCapture();
             });
         </script>
     </body>
@@ -1708,31 +1322,55 @@ def qr_plate_processor():
     uploaded_images = None
     
     with camera_tab:
-        st.info("📷 **Direct Camera Capture** - Take photos directly through your browser without using the native camera app.")
+        st.info("📷 **Direct Camera Capture** - Take photos directly using your device's camera.")
         
-        # iOS Safari iframe warning
-        st.warning("""
-        **⚠️ iOS Safari Users:** If camera access fails, this may be due to iframe restrictions. 
-        Try opening the app in a new tab or use the "📤 Upload from Mobile" tab as an alternative.
-        """)
+        # Simple camera file upload with capture attribute
+        camera_files = st.file_uploader(
+            "📷 Take Photos with Camera",
+            accept_multiple_files=True,
+            type=['jpg', 'jpeg', 'png', 'heic', 'heif'],
+            key="camera_capture_qr",
+            help="Click to open camera and take photos directly. Works on mobile devices with camera access."
+        )
         
-        # Camera interface
-        st.components.v1.html(create_camera_interface(), height=800, scrolling=True)
+        if camera_files:
+            st.success(f"✅ Captured {len(camera_files)} photo(s) with camera!")
+            
+            # Display captured photos
+            st.subheader("📸 Captured Photos")
+            for i, file in enumerate(camera_files):
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    st.write(f"**Photo {i+1}:**")
+                    st.write(f"📄 {file.name}")
+                    st.write(f"📏 {len(file.getvalue()) / 1024:.1f} KB")
+                with col2:
+                    # Show image preview
+                    try:
+                        from PIL import Image
+                        import io
+                        img = Image.open(io.BytesIO(file.getvalue()))
+                        st.image(img, caption=f"Photo {i+1}", use_column_width=True)
+                    except Exception as e:
+                        st.write(f"Preview not available: {str(e)}")
+            
+            # Add camera files to uploaded_images for processing
+            if uploaded_images is None:
+                uploaded_images = []
+            uploaded_images.extend(camera_files)
         
-        # Instructions for using camera capture
-        with st.expander("ℹ️ How to Use Direct Camera Capture", expanded=True):
+        # Instructions
+        with st.expander("ℹ️ How to Use Camera Capture", expanded=True):
             st.markdown("""
             **Step-by-Step Instructions:**
             
-            1. **📷 Start Camera** - Click to begin camera access (requires permission)
-            2. **🔄 Switch Camera** - Toggle between front and rear cameras
-            3. **📸 Take Photo** - Capture photos of your plate images
-            4. **✓ Accept/✗ Retake** - Review each photo and decide to keep or retake
-            5. **🎯 Finish & Generate Code** - Complete capture and get your share code
-            6. **💻 Switch to "Access from Computer"** - Use the share code to access photos
+            1. **📷 Click Upload Button** - This will open your device's camera
+            2. **📸 Take Photos** - Capture multiple photos of your plate images
+            3. **✓ Select Photos** - Choose which photos to upload
+            4. **🚀 Process** - Photos will be automatically added for processing
             
             **Requirements:**
-            - HTTPS connection (required for camera access)
+            - Mobile device with camera
             - Modern browser with camera support
             - Camera permission granted
             
@@ -1740,104 +1378,28 @@ def qr_plate_processor():
             - Use rear camera for better plate image quality
             - Ensure good lighting for QR code detection
             - Hold device steady while capturing
-            - Review photos before accepting
+            - Take multiple photos if needed
             """)
         
-        # iOS Safari troubleshooting
-        with st.expander("🔧 iOS Safari Troubleshooting", expanded=False):
+        # Troubleshooting
+        with st.expander("🔧 Troubleshooting", expanded=False):
             st.markdown("""
-            **Common iOS Safari Issues & Solutions:**
+            **Common Issues & Solutions:**
             
-            **Camera Permission Denied:**
-            1. Go to **Settings → Safari → Camera → Allow**
-            2. Refresh the page and try again
-            3. If still blocked, try opening in a new tab
+            **Camera Not Opening:**
+            - Make sure camera permission is granted
+            - Try refreshing the page
+            - Use a modern browser (Chrome, Safari, Firefox)
             
-            **Camera Not Working in iframe:**
-            - Streamlit runs in an iframe which can restrict camera access
-            - Try opening the app in a new tab: Right-click → "Open in New Tab"
-            - Or use the browser's address bar to navigate directly
-            
-            **Camera Not Found:**
-            - Make sure you're using Safari on iOS (not Chrome or other browsers)
-            - Check that no other apps are using the camera
-            - Restart Safari if needed
-            
-            **Poor Performance:**
-            - Close other apps to free up memory
-            - Ensure good lighting for better camera performance
-            - Try switching between front/back cameras
+            **Poor Image Quality:**
+            - Ensure good lighting
+            - Hold device steady
+            - Use rear camera instead of front camera
             
             **Still Having Issues?**
             - Use the "📤 Upload from Mobile" tab as an alternative
             - Take photos with your native camera app and upload them
-            - Check browser console for detailed error messages
             """)
-        
-        # Check for camera photos in session storage
-        st.subheader("🔍 Check for Camera Photos")
-        st.info("If you've captured photos using the camera interface above, enter the share code to access them.")
-        
-        camera_share_code = st.text_input(
-            "Enter Camera Share Code",
-            placeholder="Enter single-digit code (1-9)",
-            max_chars=1,
-            key="camera_share_code_input",
-            help="Enter the share code generated after camera capture"
-        )
-        
-        if camera_share_code and len(camera_share_code) == 1:
-            # Check if camera photos exist in session storage
-            camera_photos_js = f"""
-            <script>
-                function checkCameraPhotos() {{
-                    const cameraPhotosKey = `camera_photos_{camera_share_code}`;
-                    const cameraPhotos = sessionStorage.getItem(cameraPhotosKey);
-                    
-                    if (cameraPhotos) {{
-                        const photoData = JSON.parse(cameraPhotos);
-                        const photoCount = photoData.photos.length;
-                        
-                        // Create a message to display in Streamlit
-                        const message = document.createElement('div');
-                        message.innerHTML = `
-                            <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                                <strong>✅ Found {camera_share_code} camera photos!</strong><br>
-                                Photos: ${{photoCount}}<br>
-                                Timestamp: ${{new Date(photoData.timestamp).toLocaleString()}}
-                            </div>
-                        `;
-                        
-                        // Find a place to insert the message
-                        const container = document.querySelector('[data-testid="stAppViewContainer"]');
-                        if (container) {{
-                            container.appendChild(message);
-                        }}
-                        
-                        return true;
-                    }} else {{
-                        const message = document.createElement('div');
-                        message.innerHTML = `
-                            <div style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                                <strong>❌ No camera photos found for code {camera_share_code}</strong><br>
-                                Make sure you've completed the camera capture process above.
-                            </div>
-                        `;
-                        
-                        const container = document.querySelector('[data-testid="stAppViewContainer"]');
-                        if (container) {{
-                            container.appendChild(message);
-                        }}
-                        
-                        return false;
-                    }}
-                }}
-                
-                // Run the check
-                checkCameraPhotos();
-            </script>
-            """
-            st.components.v1.html(camera_photos_js, height=100)
     
     with share_upload_tab:
         st.info("Upload files here (typically from mobile) to generate a share code for accessing from another device.")
@@ -1888,43 +1450,8 @@ def qr_plate_processor():
         )
         
         if share_code_input and len(share_code_input) == 1:
-            # First try to load from shared files system
+            # Load shared files
             shared_data = load_shared_files(share_code_input)
-            
-            # Also check for camera photos in session storage
-            camera_photos_js = f"""
-            <script>
-                function getCameraPhotos() {{
-                    const cameraPhotosKey = `camera_photos_{share_code_input}`;
-                    const cameraPhotos = sessionStorage.getItem(cameraPhotosKey);
-                    
-                    if (cameraPhotos) {{
-                        const photoData = JSON.parse(cameraPhotos);
-                        
-                        // Create hidden input to pass data to Streamlit
-                        const hiddenInput = document.createElement('input');
-                        hiddenInput.type = 'hidden';
-                        hiddenInput.id = 'camera_photos_data_{share_code_input}';
-                        hiddenInput.value = JSON.stringify(photoData);
-                        document.body.appendChild(hiddenInput);
-                        
-                        // Signal that camera photos are available
-                        window.parent.postMessage({{
-                            type: 'camera_photos_available',
-                            shareCode: '{share_code_input}',
-                            photoData: photoData
-                        }}, '*');
-                        
-                        return true;
-                    }}
-                    return false;
-                }}
-                
-                // Run the check
-                getCameraPhotos();
-            </script>
-            """
-            st.components.v1.html(camera_photos_js, height=50)
             
             if shared_data:
                 files = shared_data["files"]
@@ -2001,109 +1528,22 @@ def qr_plate_processor():
                 st.session_state.renamed_shared_files = renamed_files
                 st.success("✅ Files are now available for processing below!")
             else:
-                # Check if camera photos exist in session storage
-                st.info("🔍 Checking for camera photos in browser storage...")
-                
-                # Show a message about camera photos
-                st.markdown("""
-                **Camera Photos Check:**
-                
-                If you captured photos using the "📱 Direct Camera Capture" tab, they are stored in your browser's session storage.
-                Camera photos are temporary and only available in the same browser session.
-                
-                **To access camera photos:**
-                1. Make sure you're using the same browser where you captured the photos
-                2. Camera photos are automatically available for processing below
-                3. No additional steps needed - they will appear in the processing section
-                """)
-                
-                # Set a flag to indicate we should check for camera photos during processing
-                st.session_state.check_camera_photos = share_code_input
+                st.error(f"❌ No files found for share code: {share_code_input}")
+                st.info("Make sure the share code is correct and hasn't expired (24 hours).")
     
     # Check if we have renamed shared files available for processing
     renamed_shared_files = st.session_state.get('renamed_shared_files', [])
     
-    # Check for camera photos in session storage
-    camera_photos_available = False
-    camera_photos_data = None
-    
-    if 'check_camera_photos' in st.session_state:
-        # Create JavaScript to check for camera photos and convert them to files
-        camera_check_js = f"""
-        <script>
-            function processCameraPhotos() {{
-                const shareCode = '{st.session_state.check_camera_photos}';
-                const cameraPhotosKey = `camera_photos_${{shareCode}}`;
-                const cameraPhotos = sessionStorage.getItem(cameraPhotosKey);
-                
-                if (cameraPhotos) {{
-                    const photoData = JSON.parse(cameraPhotos);
-                    
-                    // Convert base64 photos to file objects
-                    const files = photoData.photos.map((photo, index) => {{
-                        // Convert base64 to blob
-                        const byteCharacters = atob(photo.data.split(',')[1]);
-                        const byteNumbers = new Array(byteCharacters.length);
-                        for (let i = 0; i < byteCharacters.length; i++) {{
-                            byteNumbers[i] = byteCharacters.charCodeAt(i);
-                        }}
-                        const byteArray = new Uint8Array(byteNumbers);
-                        const blob = new Blob([byteArray], {{type: 'image/jpeg'}});
-                        
-                        // Create a file-like object
-                        const file = new File([blob], photo.filename, {{type: 'image/jpeg'}});
-                        return file;
-                    }});
-                    
-                    // Store in a way that can be accessed by Streamlit
-                    window.cameraPhotosFiles = files;
-                    
-                    // Show success message
-                    const message = document.createElement('div');
-                    message.innerHTML = `
-                        <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <strong>📷 Camera Photos Ready!</strong><br>
-                            Found ${{files.length}} photos from camera capture<br>
-                            Share Code: ${{shareCode}}
-                        </div>
-                    `;
-                    
-                    const container = document.querySelector('[data-testid="stAppViewContainer"]');
-                    if (container) {{
-                        container.appendChild(message);
-                    }}
-                    
-                    return true;
-                }}
-                return false;
-            }}
-            
-            // Run the check
-            processCameraPhotos();
-        </script>
-        """
-        st.components.v1.html(camera_check_js, height=100)
-        camera_photos_available = True
-    
+    # Determine which files to use for processing
     if renamed_shared_files:
         st.subheader("📱 Shared Files Ready for Processing")
         st.success(f"✅ You have {len(renamed_shared_files)} renamed files ready to process!")
         for file in renamed_shared_files:
             st.info(f"📄 {file.name}")
         uploaded_images = renamed_shared_files
-    elif camera_photos_available:
-        st.subheader("📷 Camera Photos Ready for Processing")
-        st.success("✅ Camera photos are available for processing!")
-        st.info("📷 Photos captured using the direct camera interface are ready to process.")
-        # Note: In a real implementation, you'd need to properly handle the camera photos
-        # For now, we'll show a message that they're available
-        uploaded_images = []  # Placeholder - would need proper integration
     else:
-        st.info("Please upload plate images using the mobile sharing workflow above.")
+        st.info("Please upload plate images using one of the methods above.")
         uploaded_images = None
-    
-    if not uploaded_images:
-        return
     
     # Process button
     st.header("🚀 Step 4: Process Images")
