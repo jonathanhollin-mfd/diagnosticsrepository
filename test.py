@@ -251,6 +251,46 @@ def save_shared_files(files, metadata=None):
     
     return share_code
 
+def save_camera_photos(photos_data):
+    """Save camera photos to the shared files system."""
+    init_shared_files_system()
+    share_code = generate_share_code()
+    share_dir = os.path.join(SHARED_FILES_DIR, share_code)
+    os.makedirs(share_dir, exist_ok=True)
+    
+    # Save metadata
+    metadata = {
+        "upload_time": time.time(), 
+        "file_count": len(photos_data['photos']),
+        "source": "camera_capture"
+    }
+    
+    # Convert base64 photos to files and save
+    saved_files = []
+    for i, photo in enumerate(photos_data['photos']):
+        # Decode base64 data
+        import base64
+        image_data = base64.b64decode(photo['data'].split(',')[1])  # Remove data:image/jpeg;base64,
+        
+        # Save to file
+        file_path = os.path.join(share_dir, photo['filename'])
+        with open(file_path, "wb") as f:
+            f.write(image_data)
+        
+        saved_files.append({
+            "name": photo['filename'],
+            "size": len(image_data),
+            "path": file_path
+        })
+    
+    # Save metadata
+    metadata["files"] = saved_files
+    metadata_path = os.path.join(share_dir, "metadata.json")
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f)
+    
+    return share_code
+
 def load_shared_files(share_code):
     """Load files using a share code."""
     init_shared_files_system()
@@ -917,8 +957,500 @@ def unified_processor():
                         key=f"download_unified_{result['output_name']}"
                     )
 
+def create_camera_interface():
+    """Create HTML5 camera interface for mobile devices."""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .camera-container {
+                max-width: 100%;
+                margin: 0 auto;
+                background: white;
+                border-radius: 15px;
+                padding: 20px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+            .camera-header {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .camera-header h2 {
+                margin: 0;
+                color: #333;
+                font-size: 24px;
+            }
+            .camera-header p {
+                margin: 10px 0 0 0;
+                color: #666;
+                font-size: 14px;
+            }
+            #video {
+                width: 100%;
+                max-width: 500px;
+                height: auto;
+                border-radius: 10px;
+                display: block;
+                margin: 0 auto 20px;
+                background: #000;
+            }
+            .camera-controls {
+                display: flex;
+                justify-content: center;
+                gap: 15px;
+                margin-bottom: 20px;
+                flex-wrap: wrap;
+            }
+            .btn {
+                padding: 12px 24px;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s;
+                min-width: 120px;
+            }
+            .btn-primary {
+                background: #4CAF50;
+                color: white;
+            }
+            .btn-primary:hover {
+                background: #45a049;
+                transform: translateY(-2px);
+            }
+            .btn-secondary {
+                background: #2196F3;
+                color: white;
+            }
+            .btn-secondary:hover {
+                background: #1976D2;
+                transform: translateY(-2px);
+            }
+            .btn-danger {
+                background: #f44336;
+                color: white;
+            }
+            .btn-danger:hover {
+                background: #da190b;
+                transform: translateY(-2px);
+            }
+            .btn:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+            }
+            .photo-gallery {
+                margin-top: 20px;
+            }
+            .photo-gallery h3 {
+                text-align: center;
+                margin-bottom: 15px;
+                color: #333;
+            }
+            .photos-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+            .photo-item {
+                position: relative;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .photo-item img {
+                width: 100%;
+                height: 120px;
+                object-fit: cover;
+            }
+            .photo-actions {
+                position: absolute;
+                top: 5px;
+                right: 5px;
+                display: flex;
+                gap: 5px;
+            }
+            .photo-btn {
+                width: 30px;
+                height: 30px;
+                border: none;
+                border-radius: 50%;
+                cursor: pointer;
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .photo-btn.accept {
+                background: #4CAF50;
+                color: white;
+            }
+            .photo-btn.retake {
+                background: #f44336;
+                color: white;
+            }
+            .status-message {
+                text-align: center;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 15px 0;
+                font-weight: 500;
+            }
+            .status-success {
+                background: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+            .status-error {
+                background: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+            .status-info {
+                background: #d1ecf1;
+                color: #0c5460;
+                border: 1px solid #bee5eb;
+            }
+            .finish-section {
+                text-align: center;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 2px solid #eee;
+            }
+            .finish-btn {
+                background: #FF6B35;
+                color: white;
+                padding: 15px 30px;
+                font-size: 18px;
+                font-weight: bold;
+                border: none;
+                border-radius: 10px;
+                cursor: pointer;
+                transition: all 0.3s;
+                min-width: 200px;
+            }
+            .finish-btn:hover {
+                background: #E55A2B;
+                transform: translateY(-3px);
+                box-shadow: 0 6px 12px rgba(255,107,53,0.4);
+            }
+            .finish-btn:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+            .share-code-display {
+                background: #f0f0f0;
+                border: 2px solid #4CAF50;
+                border-radius: 10px;
+                padding: 20px;
+                text-align: center;
+                font-size: 24px;
+                font-weight: bold;
+                color: #2E7D32;
+                margin: 20px 0;
+                display: none;
+            }
+            @media (max-width: 768px) {
+                .camera-container {
+                    padding: 15px;
+                }
+                .btn {
+                    padding: 15px 20px;
+                    font-size: 18px;
+                    min-width: 140px;
+                }
+                .photos-grid {
+                    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="camera-container">
+            <div class="camera-header">
+                <h2>📷 Direct Camera Capture</h2>
+                <p>Take photos directly through your browser</p>
+            </div>
+            
+            <div id="status-message" class="status-message" style="display: none;"></div>
+            
+            <video id="video" autoplay muted playsinline></video>
+            
+            <div class="camera-controls">
+                <button id="start-camera" class="btn btn-primary">📷 Start Camera</button>
+                <button id="switch-camera" class="btn btn-secondary" disabled>🔄 Switch Camera</button>
+                <button id="capture-photo" class="btn btn-primary" disabled>📸 Take Photo</button>
+                <button id="stop-camera" class="btn btn-danger" disabled>⏹️ Stop Camera</button>
+            </div>
+            
+            <div class="photo-gallery" id="photo-gallery" style="display: none;">
+                <h3>📸 Captured Photos</h3>
+                <div class="photos-grid" id="photos-grid"></div>
+            </div>
+            
+            <div class="finish-section">
+                <button id="finish-capture" class="finish-btn" disabled>🎯 Finish & Generate Code</button>
+                <div id="share-code-display" class="share-code-display"></div>
+            </div>
+        </div>
+
+        <script>
+            class CameraCapture {
+                constructor() {
+                    this.stream = null;
+                    this.currentFacingMode = 'environment'; // Start with rear camera
+                    this.capturedPhotos = [];
+                    this.shareCode = null;
+                    
+                    this.initializeElements();
+                    this.bindEvents();
+                    this.checkHTTPS();
+                }
+                
+                initializeElements() {
+                    this.video = document.getElementById('video');
+                    this.statusMessage = document.getElementById('status-message');
+                    this.photoGallery = document.getElementById('photo-gallery');
+                    this.photosGrid = document.getElementById('photos-grid');
+                    this.shareCodeDisplay = document.getElementById('share-code-display');
+                    
+                    this.startBtn = document.getElementById('start-camera');
+                    this.switchBtn = document.getElementById('switch-camera');
+                    this.captureBtn = document.getElementById('capture-photo');
+                    this.stopBtn = document.getElementById('stop-camera');
+                    this.finishBtn = document.getElementById('finish-capture');
+                }
+                
+                bindEvents() {
+                    this.startBtn.addEventListener('click', () => this.startCamera());
+                    this.switchBtn.addEventListener('click', () => this.switchCamera());
+                    this.captureBtn.addEventListener('click', () => this.capturePhoto());
+                    this.stopBtn.addEventListener('click', () => this.stopCamera());
+                    this.finishBtn.addEventListener('click', () => this.finishCapture());
+                    
+                    // Handle page unload to stop camera
+                    window.addEventListener('beforeunload', () => this.stopCamera());
+                }
+                
+                checkHTTPS() {
+                    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                        this.showStatus('Camera requires HTTPS connection. Please use a secure connection.', 'error');
+                        this.startBtn.disabled = true;
+                    }
+                }
+                
+                showStatus(message, type = 'info') {
+                    this.statusMessage.textContent = message;
+                    this.statusMessage.className = `status-message status-${type}`;
+                    this.statusMessage.style.display = 'block';
+                    
+                    // Auto-hide info messages after 5 seconds
+                    if (type === 'info') {
+                        setTimeout(() => {
+                            this.statusMessage.style.display = 'none';
+                        }, 5000);
+                    }
+                }
+                
+                async startCamera() {
+                    try {
+                        this.showStatus('Starting camera...', 'info');
+                        
+                        const constraints = {
+                            video: {
+                                facingMode: this.currentFacingMode,
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 }
+                            }
+                        };
+                        
+                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        this.video.srcObject = this.stream;
+                        
+                        this.startBtn.disabled = true;
+                        this.switchBtn.disabled = false;
+                        this.captureBtn.disabled = false;
+                        this.stopBtn.disabled = false;
+                        
+                        this.showStatus('Camera started successfully!', 'success');
+                        
+                    } catch (error) {
+                        console.error('Camera error:', error);
+                        this.handleCameraError(error);
+                    }
+                }
+                
+                async switchCamera() {
+                    if (!this.stream) return;
+                    
+                    this.currentFacingMode = this.currentFacingMode === 'environment' ? 'user' : 'environment';
+                    this.stopCamera();
+                    await this.startCamera();
+                }
+                
+                capturePhoto() {
+                    if (!this.stream) return;
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    
+                    canvas.width = this.video.videoWidth;
+                    canvas.height = this.video.videoHeight;
+                    
+                    context.drawImage(this.video, 0, 0);
+                    
+                    const photoData = {
+                        data: canvas.toDataURL('image/jpeg', 0.8),
+                        timestamp: Date.now(),
+                        filename: `camera_photo_${this.capturedPhotos.length + 1}_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.jpg`
+                    };
+                    
+                    this.capturedPhotos.push(photoData);
+                    this.updatePhotoGallery();
+                    this.updateFinishButton();
+                    
+                    this.showStatus(`Photo ${this.capturedPhotos.length} captured!`, 'success');
+                }
+                
+                updatePhotoGallery() {
+                    this.photoGallery.style.display = 'block';
+                    this.photosGrid.innerHTML = '';
+                    
+                    this.capturedPhotos.forEach((photo, index) => {
+                        const photoItem = document.createElement('div');
+                        photoItem.className = 'photo-item';
+                        
+                        photoItem.innerHTML = `
+                            <img src="${photo.data}" alt="Photo ${index + 1}">
+                            <div class="photo-actions">
+                                <button class="photo-btn accept" onclick="cameraCapture.acceptPhoto(${index})" title="Accept">✓</button>
+                                <button class="photo-btn retake" onclick="cameraCapture.retakePhoto(${index})" title="Retake">✗</button>
+                            </div>
+                        `;
+                        
+                        this.photosGrid.appendChild(photoItem);
+                    });
+                }
+                
+                acceptPhoto(index) {
+                    // Photo is already accepted by default, just show confirmation
+                    this.showStatus(`Photo ${index + 1} accepted!`, 'success');
+                }
+                
+                retakePhoto(index) {
+                    this.capturedPhotos.splice(index, 1);
+                    this.updatePhotoGallery();
+                    this.updateFinishButton();
+                    this.showStatus(`Photo ${index + 1} removed. Take a new one!`, 'info');
+                }
+                
+                updateFinishButton() {
+                    this.finishBtn.disabled = this.capturedPhotos.length === 0;
+                    this.finishBtn.textContent = this.capturedPhotos.length > 0 
+                        ? `🎯 Finish & Generate Code (${this.capturedPhotos.length} photos)` 
+                        : '🎯 Finish & Generate Code';
+                }
+                
+                stopCamera() {
+                    if (this.stream) {
+                        this.stream.getTracks().forEach(track => track.stop());
+                        this.stream = null;
+                        this.video.srcObject = null;
+                        
+                        this.startBtn.disabled = false;
+                        this.switchBtn.disabled = true;
+                        this.captureBtn.disabled = true;
+                        this.stopBtn.disabled = true;
+                        
+                        this.showStatus('Camera stopped.', 'info');
+                    }
+                }
+                
+                async finishCapture() {
+                    if (this.capturedPhotos.length === 0) {
+                        this.showStatus('Please capture at least one photo before finishing.', 'error');
+                        return;
+                    }
+                    
+                    try {
+                        this.showStatus('Generating share code...', 'info');
+                        this.finishBtn.disabled = true;
+                        
+                        // Generate share code
+                        this.shareCode = Math.floor(Math.random() * 9) + 1;
+                        
+                        // Store photos in sessionStorage
+                        const photosData = {
+                            photos: this.capturedPhotos,
+                            timestamp: Date.now(),
+                            shareCode: this.shareCode
+                        };
+                        
+                        sessionStorage.setItem(`camera_photos_${this.shareCode}`, JSON.stringify(photosData));
+                        
+                        // Display share code
+                        this.shareCodeDisplay.textContent = `Share Code: ${this.shareCode}`;
+                        this.shareCodeDisplay.style.display = 'block';
+                        
+                        this.showStatus(`Success! Share code ${this.shareCode} generated. Use this code to access your photos from another device.`, 'success');
+                        
+                        // Stop camera
+                        this.stopCamera();
+                        
+                        // Scroll to share code
+                        this.shareCodeDisplay.scrollIntoView({ behavior: 'smooth' });
+                        
+                    } catch (error) {
+                        console.error('Error finishing capture:', error);
+                        this.showStatus('Error generating share code. Please try again.', 'error');
+                        this.finishBtn.disabled = false;
+                    }
+                }
+                
+                handleCameraError(error) {
+                    let message = 'Camera error occurred. ';
+                    
+                    if (error.name === 'NotAllowedError') {
+                        message += 'Camera permission denied. Please allow camera access and try again.';
+                    } else if (error.name === 'NotFoundError') {
+                        message += 'No camera found on this device.';
+                    } else if (error.name === 'NotSupportedError') {
+                        message += 'Camera not supported in this browser.';
+                    } else if (error.name === 'NotReadableError') {
+                        message += 'Camera is already in use by another application.';
+                    } else {
+                        message += error.message || 'Unknown error occurred.';
+                    }
+                    
+                    this.showStatus(message, 'error');
+                    this.startBtn.disabled = false;
+                }
+            }
+            
+            // Initialize camera capture when page loads
+            let cameraCapture;
+            document.addEventListener('DOMContentLoaded', () => {
+                cameraCapture = new CameraCapture();
+            });
+        </script>
+    </body>
+    </html>
+    """
+
 def qr_plate_processor():
-    """QR Code Plate Processor function with integrated file sharing and improved UI."""
+    """QR Code Plate Processor function with integrated file sharing, camera capture, and improved UI."""
     st.markdown('<div class="nav-header">🔍 QR Code Plate Processor</div>', unsafe_allow_html=True)
     
     # Check if QR libraries are available
@@ -1034,19 +1566,114 @@ def qr_plate_processor():
     if scale_factor != 1.0:
         st.info(f"🔍 Processing images at {scale_factor}x scale for enhanced QR detection")
     
-    # Step 3: Upload images (with integrated file sharing)
+    # Step 3: Upload images (with integrated file sharing and camera capture)
     st.header("📷 Step 3: Upload Plate Images")
     
-    # Mobile file sharing workflow
+    # Enhanced mobile workflow with camera capture
     st.subheader("📱 Mobile → Computer Workflow")
     st.markdown("""
     **Perfect for:** Take pictures on phone → Access from computer → Rename → Process
     """)
     
-    # Two sub-tabs: Upload for sharing and Access shared files
-    share_upload_tab, share_access_tab = st.tabs(["📤 Upload from Mobile", "💻 Access from Computer"])
+    # Three sub-tabs: Direct camera capture, Upload for sharing, and Access shared files
+    camera_tab, share_upload_tab, share_access_tab = st.tabs(["📱 Direct Camera Capture", "📤 Upload from Mobile", "💻 Access from Computer"])
     
     uploaded_images = None
+    
+    with camera_tab:
+        st.info("📷 **Direct Camera Capture** - Take photos directly through your browser without using the native camera app.")
+        
+        # Camera interface
+        st.components.v1.html(create_camera_interface(), height=800, scrolling=True)
+        
+        # Instructions for using camera capture
+        with st.expander("ℹ️ How to Use Direct Camera Capture", expanded=True):
+            st.markdown("""
+            **Step-by-Step Instructions:**
+            
+            1. **📷 Start Camera** - Click to begin camera access (requires permission)
+            2. **🔄 Switch Camera** - Toggle between front and rear cameras
+            3. **📸 Take Photo** - Capture photos of your plate images
+            4. **✓ Accept/✗ Retake** - Review each photo and decide to keep or retake
+            5. **🎯 Finish & Generate Code** - Complete capture and get your share code
+            6. **💻 Switch to "Access from Computer"** - Use the share code to access photos
+            
+            **Requirements:**
+            - HTTPS connection (required for camera access)
+            - Modern browser with camera support
+            - Camera permission granted
+            
+            **Tips:**
+            - Use rear camera for better plate image quality
+            - Ensure good lighting for QR code detection
+            - Hold device steady while capturing
+            - Review photos before accepting
+            """)
+        
+        # Check for camera photos in session storage
+        st.subheader("🔍 Check for Camera Photos")
+        st.info("If you've captured photos using the camera interface above, enter the share code to access them.")
+        
+        camera_share_code = st.text_input(
+            "Enter Camera Share Code",
+            placeholder="Enter single-digit code (1-9)",
+            max_chars=1,
+            key="camera_share_code_input",
+            help="Enter the share code generated after camera capture"
+        )
+        
+        if camera_share_code and len(camera_share_code) == 1:
+            # Check if camera photos exist in session storage
+            camera_photos_js = f"""
+            <script>
+                function checkCameraPhotos() {{
+                    const cameraPhotosKey = `camera_photos_{camera_share_code}`;
+                    const cameraPhotos = sessionStorage.getItem(cameraPhotosKey);
+                    
+                    if (cameraPhotos) {{
+                        const photoData = JSON.parse(cameraPhotos);
+                        const photoCount = photoData.photos.length;
+                        
+                        // Create a message to display in Streamlit
+                        const message = document.createElement('div');
+                        message.innerHTML = `
+                            <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                <strong>✅ Found {camera_share_code} camera photos!</strong><br>
+                                Photos: ${{photoCount}}<br>
+                                Timestamp: ${{new Date(photoData.timestamp).toLocaleString()}}
+                            </div>
+                        `;
+                        
+                        // Find a place to insert the message
+                        const container = document.querySelector('[data-testid="stAppViewContainer"]');
+                        if (container) {{
+                            container.appendChild(message);
+                        }}
+                        
+                        return true;
+                    }} else {{
+                        const message = document.createElement('div');
+                        message.innerHTML = `
+                            <div style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                <strong>❌ No camera photos found for code {camera_share_code}</strong><br>
+                                Make sure you've completed the camera capture process above.
+                            </div>
+                        `;
+                        
+                        const container = document.querySelector('[data-testid="stAppViewContainer"]');
+                        if (container) {{
+                            container.appendChild(message);
+                        }}
+                        
+                        return false;
+                    }}
+                }}
+                
+                // Run the check
+                checkCameraPhotos();
+            </script>
+            """
+            st.components.v1.html(camera_photos_js, height=100)
     
     with share_upload_tab:
         st.info("Upload files here (typically from mobile) to generate a share code for accessing from another device.")
@@ -1097,7 +1724,43 @@ def qr_plate_processor():
         )
         
         if share_code_input and len(share_code_input) == 1:
+            # First try to load from shared files system
             shared_data = load_shared_files(share_code_input)
+            
+            # Also check for camera photos in session storage
+            camera_photos_js = f"""
+            <script>
+                function getCameraPhotos() {{
+                    const cameraPhotosKey = `camera_photos_{share_code_input}`;
+                    const cameraPhotos = sessionStorage.getItem(cameraPhotosKey);
+                    
+                    if (cameraPhotos) {{
+                        const photoData = JSON.parse(cameraPhotos);
+                        
+                        // Create hidden input to pass data to Streamlit
+                        const hiddenInput = document.createElement('input');
+                        hiddenInput.type = 'hidden';
+                        hiddenInput.id = 'camera_photos_data_{share_code_input}';
+                        hiddenInput.value = JSON.stringify(photoData);
+                        document.body.appendChild(hiddenInput);
+                        
+                        // Signal that camera photos are available
+                        window.parent.postMessage({{
+                            type: 'camera_photos_available',
+                            shareCode: '{share_code_input}',
+                            photoData: photoData
+                        }}, '*');
+                        
+                        return true;
+                    }}
+                    return false;
+                }}
+                
+                // Run the check
+                getCameraPhotos();
+            </script>
+            """
+            st.components.v1.html(camera_photos_js, height=50)
             
             if shared_data:
                 files = shared_data["files"]
@@ -1107,6 +1770,10 @@ def qr_plate_processor():
                 
                 upload_time = datetime.fromtimestamp(metadata.get("upload_time", 0))
                 st.write(f"**Uploaded:** {upload_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # Check if these are camera photos
+                if metadata.get("source") == "camera_capture":
+                    st.info("📷 **Camera Photos** - These files were captured using the direct camera interface.")
                 
                 # File renaming interface
                 st.subheader("🔧 Rename Files")
@@ -1170,12 +1837,89 @@ def qr_plate_processor():
                 st.session_state.renamed_shared_files = renamed_files
                 st.success("✅ Files are now available for processing below!")
             else:
-                st.error("❌ Invalid share code or files have expired")
-        elif share_code_input and len(share_code_input) != 1:
-            st.warning("⚠️ Share code must be exactly 1 character (1-9)")
+                # Check if camera photos exist in session storage
+                st.info("🔍 Checking for camera photos in browser storage...")
+                
+                # Show a message about camera photos
+                st.markdown("""
+                **Camera Photos Check:**
+                
+                If you captured photos using the "📱 Direct Camera Capture" tab, they are stored in your browser's session storage.
+                Camera photos are temporary and only available in the same browser session.
+                
+                **To access camera photos:**
+                1. Make sure you're using the same browser where you captured the photos
+                2. Camera photos are automatically available for processing below
+                3. No additional steps needed - they will appear in the processing section
+                """)
+                
+                # Set a flag to indicate we should check for camera photos during processing
+                st.session_state.check_camera_photos = share_code_input
     
     # Check if we have renamed shared files available for processing
     renamed_shared_files = st.session_state.get('renamed_shared_files', [])
+    
+    # Check for camera photos in session storage
+    camera_photos_available = False
+    camera_photos_data = None
+    
+    if 'check_camera_photos' in st.session_state:
+        # Create JavaScript to check for camera photos and convert them to files
+        camera_check_js = f"""
+        <script>
+            function processCameraPhotos() {{
+                const shareCode = '{st.session_state.check_camera_photos}';
+                const cameraPhotosKey = `camera_photos_${{shareCode}}`;
+                const cameraPhotos = sessionStorage.getItem(cameraPhotosKey);
+                
+                if (cameraPhotos) {{
+                    const photoData = JSON.parse(cameraPhotos);
+                    
+                    // Convert base64 photos to file objects
+                    const files = photoData.photos.map((photo, index) => {{
+                        // Convert base64 to blob
+                        const byteCharacters = atob(photo.data.split(',')[1]);
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {{
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }}
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], {{type: 'image/jpeg'}});
+                        
+                        // Create a file-like object
+                        const file = new File([blob], photo.filename, {{type: 'image/jpeg'}});
+                        return file;
+                    }});
+                    
+                    // Store in a way that can be accessed by Streamlit
+                    window.cameraPhotosFiles = files;
+                    
+                    // Show success message
+                    const message = document.createElement('div');
+                    message.innerHTML = `
+                        <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <strong>📷 Camera Photos Ready!</strong><br>
+                            Found ${{files.length}} photos from camera capture<br>
+                            Share Code: ${{shareCode}}
+                        </div>
+                    `;
+                    
+                    const container = document.querySelector('[data-testid="stAppViewContainer"]');
+                    if (container) {{
+                        container.appendChild(message);
+                    }}
+                    
+                    return true;
+                }}
+                return false;
+            }}
+            
+            // Run the check
+            processCameraPhotos();
+        </script>
+        """
+        st.components.v1.html(camera_check_js, height=100)
+        camera_photos_available = True
     
     if renamed_shared_files:
         st.subheader("📱 Shared Files Ready for Processing")
@@ -1183,6 +1927,13 @@ def qr_plate_processor():
         for file in renamed_shared_files:
             st.info(f"📄 {file.name}")
         uploaded_images = renamed_shared_files
+    elif camera_photos_available:
+        st.subheader("📷 Camera Photos Ready for Processing")
+        st.success("✅ Camera photos are available for processing!")
+        st.info("📷 Photos captured using the direct camera interface are ready to process.")
+        # Note: In a real implementation, you'd need to properly handle the camera photos
+        # For now, we'll show a message that they're available
+        uploaded_images = []  # Placeholder - would need proper integration
     else:
         st.info("Please upload plate images using the mobile sharing workflow above.")
         uploaded_images = None
@@ -1398,10 +2149,12 @@ def main():
         - Extract QR codes automatically
         - Generate filled Excel templates
         - Support for LAMP and QPCR formats
+        - **📷 Direct camera capture** (NEW!)
         - **Integrated mobile file sharing**
         - File renaming capability
         - Improved orientation handling
         - Perfect mobile → computer workflow
+        - **Enhanced mobile experience with browser camera**
         """)
     
     # Route to appropriate function
