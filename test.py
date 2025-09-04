@@ -958,35 +958,71 @@ def unified_processor():
                     )
 
 def create_camera_interface():
-    """Create HTML5 camera interface for mobile devices with enhanced iOS Safari compatibility."""
-    return """
+    """Create HTML5 camera interface for mobile devices with debugging capabilities."""
+    # Read the debug HTML file
+    try:
+        with open('/Users/jonathanhollin/Downloads/diagnosticsrepository-main/camera_debug.html', 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        # Fallback to inline HTML if file not found
+        return """
     <!DOCTYPE html>
     <html>
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                margin: 0;
-                padding: 20px;
-                background: #f5f5f5;
-            }
-            .camera-container {
-                max-width: 100%;
-                margin: 0 auto;
-                background: white;
-                border-radius: 15px;
-                padding: 20px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            }
-            .camera-header {
-                text-align: center;
-                margin-bottom: 20px;
-            }
-            .camera-header h2 {
-                margin: 0;
+    </head>
+    <body>
+        <div style="padding: 20px; text-align: center;">
+            <h2>📷 Camera Interface</h2>
+            <p>Debug camera interface not available. Please check file permissions.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+def qr_plate_processor():
+    """QR Code Plate Processor function with integrated file sharing, camera capture, and improved UI."""
+    st.markdown('<div class="nav-header">🔍 QR Code Plate Processor</div>', unsafe_allow_html=True)
+    
+    # Check if QR libraries are available
+    if not QR_AVAILABLE:
+        st.error("❌ QR Code processing requires additional libraries!")
+        
+        # Show specific missing libraries
+        missing_libs = []
+        if not CV2_AVAILABLE:
+            missing_libs.append("opencv-python")
+        if not PYZBAR_AVAILABLE:
+            missing_libs.append("pyzbar")
+        
+        st.markdown(f"""
+        **Missing libraries:** {', '.join(missing_libs)}
+        
+        **For local development, install with:**
+        ```bash
+        pip install {' '.join(missing_libs)}
+        ```
+        
+        **For Streamlit Cloud deployment:**
+        
+        Add this `packages.txt` file to your repository root:
+        ```
+        libzbar0
+        ```
+        
+        And this `requirements.txt`:
+        ```
+        opencv-python-headless
+        pyzbar
+        ```
+        
+        Note: OpenCV can be challenging in cloud environments. Use `opencv-python-headless` for better compatibility.
+        """)
+        
+        st.info("💡 **Alternative**: You can use the Unified Plant Data Processor which works without these dependencies.")
+        return
                 color: #333;
                 font-size: 24px;
             }
