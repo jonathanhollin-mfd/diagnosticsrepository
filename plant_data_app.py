@@ -42,7 +42,7 @@ QR_AVAILABLE = CV2_AVAILABLE and PYZBAR_AVAILABLE
 
 # ===================== CONFIGURATION =====================
 st.set_page_config(
-    page_title="The Riaz Machine (Marcus Stinks)",
+    page_title="The Loraine Machine",
     page_icon="🌱",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -1369,7 +1369,7 @@ def qr_plate_processor():
 def main():
     """Main application function."""
     # Sidebar navigation
-    st.sidebar.title("The Riaz Machine")
+    st.sidebar.title("The Loraine Machine")
     st.sidebar.markdown("---")
     
     # Navigation options (removed separate Mobile File Sharing)
