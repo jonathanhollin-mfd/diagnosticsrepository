@@ -42,7 +42,7 @@ QR_AVAILABLE = CV2_AVAILABLE and PYZBAR_AVAILABLE
 
 # ===================== CONFIGURATION =====================
 st.set_page_config(
-    page_title="The Riaz Machine",
+    page_title="The Riaz Machine (Marcus Stinks)",
     page_icon="🌱",
     layout="wide",
     initial_sidebar_state="expanded"
