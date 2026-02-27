@@ -8,6 +8,7 @@ import xlrd
 import io
 import base64
 import os
+from pathlib import Path
 from typing import List, Tuple, Optional
 import numpy as np
 from PIL import Image
@@ -777,7 +778,20 @@ def process_plate_image(uploaded_image, template_buffer, plate_config, scale_fac
 def unified_processor():
     """Unified processor function that handles both plant data and headwaters processing."""
     st.markdown('<div class="nav-header">🔄 Unified Plant Data Processor</div>', unsafe_allow_html=True)
-    
+
+    # Centered hero image below title (same folder as script, or assets/)
+    try:
+        script_dir = Path(__file__).parent
+        hero_path = (script_dir / "unified-processor-hero.png").resolve()
+        if not hero_path.exists():
+            hero_path = (script_dir / "assets" / "unified-processor-hero.png").resolve()
+        if hero_path.exists():
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(str(hero_path), use_container_width=True)
+    except Exception:
+        pass
+
     # Check if template file exists in repository
     if not check_template_exists(TEMPLATE_FILE):
         st.error(f"❌ Template file '{TEMPLATE_FILE}' not found in repository!")
