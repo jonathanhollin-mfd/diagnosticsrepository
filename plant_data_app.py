@@ -35,8 +35,39 @@ except ImportError:
 try:
     from pyzbar.pyzbar import decode as pyzbar_decode
     PYZBAR_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     PYZBAR_AVAILABLE = False
+
+# Fall back to OpenCV's built-in QR detector when pyzbar is unavailable.
+# pyzbar needs the libzbar0 system package, which we can no longer install on
+# Streamlit Cloud; OpenCV needs nothing beyond the wheel we already depend on.
+if not PYZBAR_AVAILABLE and CV2_AVAILABLE:
+
+    class _QRResult:
+        """Minimal stand-in for a pyzbar result. Callers only read .data."""
+
+        __slots__ = ("data",)
+
+        def __init__(self, text):
+            self.data = text.encode("utf-8")
+
+    _qr_detector = cv2.QRCodeDetector()
+
+    def pyzbar_decode(img):
+        # Single-code detection is markedly more reliable than the multi
+        # variant, and every call site here decodes one cropped well.
+        try:
+            text, _pts, _straight = _qr_detector.detectAndDecode(img)
+            if text:
+                return [_QRResult(text)]
+            ok, decoded, _points, _straight_multi = _qr_detector.detectAndDecodeMulti(img)
+            if ok:
+                return [_QRResult(t) for t in decoded if t]
+        except cv2.error:
+            pass
+        return []
+
+    PYZBAR_AVAILABLE = True
 
 # QR functionality is available only if both libraries are present
 QR_AVAILABLE = CV2_AVAILABLE and PYZBAR_AVAILABLE
